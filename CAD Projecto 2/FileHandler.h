@@ -8,51 +8,7 @@
 #ifndef FILEHANDLER_H
 #define	FILEHANDLER_H
 
-#include <vector>
-#include <list>
-#include <algorithm>
-
-#define RULE_SIZE   11
-#define INPUT_SIZE  10
-
-#define RULE_NUM    2000000
-#define INPUT_NUM   1000000
-
-#define NUM_RANGE   10000
-
-#define WORK_RANGE  100000
-
-//#define SERIAL
-#define PTHREADS
-//#define OPENMP
-
-#define NUM_FILES   1
-
-#ifndef SERIAL
-#define NUM_THREADS 4
-#else
-#define NUM_THREADS 1 // DO NOT CHANGE
-#endif
-
-#define INPUT_STRING "dataset/THE_PROBLEM/trans_day_%d.csv"
-#define OUPUT_STRING "dataset/THE_PROBLEM/output_%d.csv"
-
-#define LOCK(mutex)     pthread_mutex_lock(&(mutex))
-#define UNLOCK(mutex)   pthread_mutex_unlock(&(mutex))
-
-#define COND_BROADCAST(cond_mutex) pthread_cond_broadcast(&(cond_mutex))
-#define COND_SIGNAL(cond_mutex) pthread_cond_signal(&(cond_mutex))
-
-#define COND_WAIT(cond, cond_mutex, mutex) \
-while ( cond ) {   \
-   pthread_cond_wait(&(cond_mutex), &(mutex));   \
-}
-
-using namespace std;
-
-typedef int*  cell_array;
-typedef int   cell_value;
-typedef vector<int*> cell_vector;
+#include "defines.h"
 
 struct LoadedFile {
     cell_array memoryBlock;

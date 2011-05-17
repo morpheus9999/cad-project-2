@@ -6,30 +6,23 @@
  */
 
 #include <cstdlib>
-#include "FileHandler.h"
 #include <iostream>
 #include <pthread.h>
 #include <omp.h>
 #include <cmath>
 #include <time.h>
 
-
 #include "mpi.h"
 
-#include <map>
+#include "FileHandler.h"
 
-using namespace std;
 using namespace MPI;
 
-
-#define OUTPUT(file, input, r_class, t_id) \
-(file)->output[(t_id)].push_back(pair<cell_array, cell_value>((input), (r_class)))
-
-
-
-#define NUM_CLASS 100
-
-typedef short level;
+/* 
+ * 
+ * STRUCTS
+ *
+ */
 
 struct StateNode {
     cell_value index;
@@ -48,33 +41,44 @@ struct ContainFirst {
     map< level, vector<StateNode*>* > next;
 };
 
-void* InitiateThread(void* p);
+/* 
+ * 
+ * FUNCTION PROTOTYPES
+ *
+ */
 
+void* thread_work(void * id);
+void addZeroRuleOutput(cell_array input);
 
+void printSM(StateNode* state, int d);
+void buildStateMachine(cell_vector* ruleSet);
+
+/* 
+ * 
+ * GLOBAL VARIABLES
+ *
+ */
+
+int work_ID;
+pthread_mutex_t mutex_ID;
+
+bool hasZeroRule;
+cell_value zeroClass;
+StateCompare compareObj;
+
+cell_vector* inputSet;
+
+FileHandler fileHandler;
+StateNode finalState[NUM_CLASS];
+vector<StateNode*> startIndex[INPUT_SIZE];
     
-    void* thread_work(void * id);
+map< cell_value, ContainFirst* > mappedIndexes[INPUT_SIZE];
 
-    void addZeroRuleOutput(cell_array input);
-
-    int work_ID;
-    pthread_mutex_t mutex_ID;
-
-    bool hasZeroRule;
-    cell_value zeroClass;
-    StateCompare compareObj;
-
-    cell_vector* inputSet;
-
-    FileHandler fileHandler;
-    StateNode finalState[NUM_CLASS];
-    vector<StateNode*> startIndex[INPUT_SIZE];
-    
-    map< cell_value, ContainFirst* > mappedIndexes[INPUT_SIZE];
-    
-    void printSM(StateNode* state, int d);
-    void buildStateMachine(cell_vector* ruleSet);
-
-
+/* 
+ * 
+ * FUNCTIONS
+ *
+ */
 
 int main(int argc, char** argv) {
     int numprocs, rank, namelen, i;
