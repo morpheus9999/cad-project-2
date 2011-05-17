@@ -12,6 +12,8 @@
     <logicalFolder name="SourceFiles"
                    displayName="Source Files"
                    projectFiles="true">
+      <itemPath>FileHandler.cpp</itemPath>
+      <itemPath>FileHandler.h</itemPath>
       <itemPath>main.cpp</itemPath>
     </logicalFolder>
     <logicalFolder name="TestFiles"
@@ -34,7 +36,16 @@
         <compilerSet>default</compilerSet>
       </toolsSet>
       <compileType>
+        <ccTool>
+          <commandlineTool>mpic++</commandlineTool>
+        </ccTool>
       </compileType>
+      <item path="main.cpp" ex="false" tool="1" flavor="0">
+        <ccTool>
+          <commandlineTool>mpicc
+</commandlineTool>
+        </ccTool>
+      </item>
     </conf>
     <conf name="Release" type="1">
       <toolsSet>
