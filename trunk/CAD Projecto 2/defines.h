@@ -25,9 +25,7 @@
 
 #define NUM_CLASS   100
 
-//#define SERIAL
-#define PTHREADS
-//#define OPENMP
+#define RULE_ACCEPTED_LEVEL -1
 
 #define NUM_FILES   1
 
