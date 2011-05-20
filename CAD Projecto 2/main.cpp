@@ -94,14 +94,21 @@ int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Get_processor_name(processor_name, &namelen);
+    //MPI_Get_processor_name(processor_name, &namelen);
     
     cout << numprocs << endl;
     
-
     cell_vector* ruleSet;
+    
+    for(int i=0; i< numprocs;i++){
+        cout << i << i*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
+        ruleSet = fileHandler.readRuleFileMPI("/Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/dataset/THE_PROBLEM/rules2M.csv",i*RULE_NUM,RULE_NUM/numprocs);
+
+    }
+        
+    
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
-    ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
         //ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
 
     fileHandler.start();
@@ -343,8 +350,8 @@ void buildStateMachine(cell_vector* ruleSet) {
                 StateNode *newState = new StateNode;
                 //                if(i==9 && (*rule_it)[i] == 5620)
                 //                    int b=0;
-                newState->index = i;
-                newState->value = (*rule_it)[i];
+//                newState->index = i;
+  //              newState->value = (*rule_it)[i];
 
                 if (ptr != NULL) {
                     if (depth == 2) {

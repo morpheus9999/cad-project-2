@@ -51,6 +51,12 @@ cell_vector* FileHandler::readRuleFile(const char* FileName) {
 
     return newRule->workVector;
 }
+cell_vector* FileHandler::readRuleFileMPI(const char* FileName,int start,int end) {
+    LoadedFile* newRule = readFileMPI(FileName, RULE_SIZE, RULE_NUM, RULE_NUM*RULE_SIZE,start,end);
+    ruleHandler = newRule;
+
+    return newRule->workVector;
+}
 
 cell_vector* FileHandler::readInputFile(const char* FileName) {
     LoadedFile* newInput = readFile(FileName, INPUT_SIZE, INPUT_NUM, INPUT_NUM*INPUT_SIZE);
@@ -392,6 +398,80 @@ LoadedFile* FileHandler::readFile(const char* FileName, int row_size, int vector
     int ruleIndex = 0, ruleStart;
 
     while (value>=0) {
+        ruleStart = ruleIndex;
+
+        array[ruleIndex++] = value;
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+        array[ruleIndex++] = c_nextToken(',');
+
+        if(row_size == RULE_SIZE) {
+            array[ruleIndex++] = c_nextToken(',');
+            array[ruleIndex++] = c_nextToken('\n');
+        }else {
+            array[ruleIndex++] = c_nextToken('\n');
+        }
+
+        rules->push_back(&array[ruleStart]);
+
+        value = c_nextToken(',');
+    }
+
+    close(fd);
+    munmap(map, sizeof(map));
+
+    LoadedFile *newFile  = new LoadedFile;
+
+    newFile->size        = number_size;
+    newFile->memoryBlock = array;
+    newFile->workVector  = rules;
+
+    cout << "\nRead took: " << (((double)clock() - s) / CLOCKS_PER_SEC) << endl;
+
+    return newFile;
+}
+
+LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vector_size, int number_size,int start, int end) {
+
+    clock_t s = clock();
+
+    cell_vector* rules = new cell_vector();
+    rules->reserve(vector_size);
+
+    int fd;
+    char *map;
+    struct stat buffer;
+    int status;
+    cout << "file name: " << FileName << endl;
+    fd = open(FileName, O_RDONLY);
+    status = fstat(fd, &buffer);
+
+    if (fd == -1) {
+	perror("Error opening file for reading");
+	exit(EXIT_FAILURE);
+    }
+
+    map = static_cast<char*>(mmap(NULL, buffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0));
+
+    if (map == MAP_FAILED) {
+	close(fd);
+	perror("Error mmapping the file");
+	exit(EXIT_FAILURE);
+    }
+    
+    tokenPtr = map;
+    cell_value value = c_nextToken(',');
+    
+    cell_array array = new cell_value[number_size];
+    int ruleIndex = start, ruleStart;
+
+    while (ruleStart<end) {
+        
         ruleStart = ruleIndex;
 
         array[ruleIndex++] = value;
