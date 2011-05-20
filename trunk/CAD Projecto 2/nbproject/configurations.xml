@@ -44,8 +44,7 @@
       </compileType>
       <item path="main.cpp" ex="false" tool="1" flavor="0">
         <ccTool>
-          <commandlineTool>mpicc
-</commandlineTool>
+          <commandlineTool>g++</commandlineTool>
         </ccTool>
       </item>
     </conf>

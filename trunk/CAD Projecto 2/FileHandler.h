@@ -10,6 +10,8 @@
 
 #include "defines.h"
 
+#define MAX_RULES 2000000
+
 struct LoadedFile {
     cell_array memoryBlock;
     cell_vector* workVector;
@@ -43,6 +45,7 @@ public:
     virtual ~FileHandler();
 
     cell_vector* readRuleFile(const char* FileName);
+    cell_vector* readRuleFileMPI(const char* FileName, int start, int end);
     cell_vector* readInputFile(const char* FileName);
     
     void start();
@@ -63,7 +66,7 @@ private:
     cell_value c_nextToken(char delim);
     
     LoadedFile* readFile(const char* FileName, int row_size, int vector_size, int number_size);
-
+    LoadedFile* readFileMPI(const char* FileName, int row_size, int vector_size, int number_size,int start,int end);
     int highest_available;
     
     /* Atributes */
