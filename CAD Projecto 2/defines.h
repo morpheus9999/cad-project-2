@@ -30,7 +30,7 @@
 #define NUM_FILES   1
 
 #ifndef SERIAL
-#define NUM_THREADS 4
+#define NUM_THREADS 1//4
 #else
 #define NUM_THREADS 1 // DO NOT CHANGE
 #endif

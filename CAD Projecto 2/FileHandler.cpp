@@ -52,7 +52,7 @@ cell_vector* FileHandler::readRuleFile(const char* FileName) {
     return newRule->workVector;
 }
 cell_vector* FileHandler::readRuleFileMPI(const char* FileName,int start,int end) {
-    LoadedFile* newRule = readFileMPI(FileName, RULE_SIZE, RULE_NUM, RULE_NUM*RULE_SIZE,start,end);
+    LoadedFile* newRule = readFileMPI(FileName, RULE_SIZE, RULE_NUM-end, (RULE_NUM-end)*RULE_SIZE,start,end);
     ruleHandler = newRule;
 
     return newRule->workVector;
@@ -236,7 +236,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     }
     cout << endl;
 #endif
-
+    cout << "contador::"<<fileSize << endl; 
     fileSize *= RULE_SIZE * 6 * sizeof (char);
 
     fd = open(fileName, O_RDWR | O_CREAT, (mode_t) 0600);
@@ -271,7 +271,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     int idx = 0;
     cell_array t_id;
     list< pair<cell_array, cell_value> >::iterator it;
-
+    cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
 
 #ifdef SERIAL
@@ -449,10 +449,13 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
     int status;
     cout << "file name: " << FileName << endl;
     fd = open(FileName, O_RDONLY);
+        
+
     status = fstat(fd, &buffer);
+    
 
     if (fd == -1) {
-	perror("Error opening file for reading");
+	perror("Error opening file for reading ......");
 	exit(EXIT_FAILURE);
     }
 
@@ -465,12 +468,20 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
     }
     
     tokenPtr = map;
-    cell_value value = c_nextToken(',');
+    cell_value value;
     
     cell_array array = new cell_value[number_size];
-    int ruleIndex = start, ruleStart;
+    int ruleIndex = 0, ruleStart;
 
-    while (ruleStart<end) {
+    while(ruleIndex < start){
+            
+           array[ruleIndex++] = c_nextToken('\n'); 
+        }
+    value = c_nextToken(',');
+    ruleIndex=0;
+    int k=0;
+    while (k<end) {
+        
         
         ruleStart = ruleIndex;
 
@@ -494,8 +505,9 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
         rules->push_back(&array[ruleStart]);
 
         value = c_nextToken(',');
+        k++;
     }
-
+    cout << "k:::: " << k << endl;
     close(fd);
     munmap(map, sizeof(map));
 
@@ -505,7 +517,7 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
     newFile->memoryBlock = array;
     newFile->workVector  = rules;
 
-    cout << "\nRead took: " << (((double)clock() - s) / CLOCKS_PER_SEC) << endl;
+    cout << "\nRead took (MPI): " << (((double)clock() - s) / CLOCKS_PER_SEC) << endl;
 
     return newFile;
 }
