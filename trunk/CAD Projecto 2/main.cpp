@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     for(int i=0; i< numprocs;i++){
         cout << 1 << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
         ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
-        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",0*RULE_NUM,RULE_NUM/10);
+        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",0*RULE_NUM,RULE_NUM/2);
         //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
     
     cout << ruleSet->size() << endl;

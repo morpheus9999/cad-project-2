@@ -245,6 +245,8 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         perror("Error opening file for writing");
         exit(EXIT_FAILURE);
     }
+    if(fileSize==0)
+        fileSize=2;
 
     result = lseek(fd, fileSize - 1, SEEK_SET);
     if (result == -1) {
