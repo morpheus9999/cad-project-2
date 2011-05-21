@@ -87,6 +87,7 @@ map< cell_value, ContainFirst* > mappedIndexes[INPUT_SIZE];
  */
 
 int main(int argc, char** argv) {
+    //264345972
     int numprocs, rank, namelen, i;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     
@@ -95,17 +96,18 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     //MPI_Get_processor_name(processor_name, &namelen);
-    
+    numprocs=2;
     cout << numprocs << endl;
     
     cell_vector* ruleSet;
     
     for(int i=0; i< numprocs;i++){
-        cout << i << i*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
-        ruleSet = fileHandler.readRuleFileMPI("/Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/dataset/THE_PROBLEM/rules2M.csv",i*RULE_NUM,RULE_NUM/numprocs);
-
-    }
-        
+        cout << 1 << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
+        ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
+        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",0*RULE_NUM,RULE_NUM/10);
+        //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    
+    cout << ruleSet->size() << endl;
     
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
     //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
@@ -116,13 +118,14 @@ int main(int argc, char** argv) {
 //    inputSet = fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
     //        inputSet = fileHandler.readInputFile("dataset/sm_input.csv");
     //    inputSet = fileHandler.readInputFile("dataset/xs_input.csv");
+cout << "entra" << endl;
 
     buildStateMachine(ruleSet);
     
     cout << "Printing tree\n";
     //printSM(root, 0);
     
-    return 0;
+   // return 0;
     
     pthread_t thread[NUM_THREADS];
     int threads[NUM_THREADS];
@@ -142,7 +145,7 @@ int main(int argc, char** argv) {
 
     for (t = 0; t < NUM_THREADS; t++) {
         threads[t]=t;
-        rc = pthread_create(&thread[t], &attr, thread_work, (void*) threads[t]);
+        rc = pthread_create(&thread[t], &attr, thread_work,  &threads[t]);
         if (rc) {
             printf("ERROR; return code from pthread_create() is % d\n", rc);
             exit(-1);
@@ -161,12 +164,13 @@ int main(int argc, char** argv) {
     
     pthread_mutex_destroy(&mutex_ID);
     pthread_exit(NULL);
-
+}
     return 0;
 }
 
-void thread_work() {
-    int my_id;
+void *thread_work(void *id) {
+    int my_id = *((int*) id);
+    
     int num_worked, startIndex, fileId = 0;
 
     LOCK(mutex_ID);
@@ -334,12 +338,9 @@ void buildStateMachine(cell_vector* ruleSet) {
     short depth;
 
     ContainFirst *last;
-    int count=0, kj=0;
-    level cache_lvl=-1;
-    cell_value cache_value=-1;
-    map< cell_value, ContainFirst* >::iterator cache_cell;
-
+    int contador=0;
     while (rule_it < ruleSet->end()) {
+        
         ptr = NULL;
         depth = 0;
         for (int i = 0; i < INPUT_SIZE; i++) {
@@ -350,8 +351,8 @@ void buildStateMachine(cell_vector* ruleSet) {
                 StateNode *newState = new StateNode;
                 //                if(i==9 && (*rule_it)[i] == 5620)
                 //                    int b=0;
-//                newState->index = i;
-  //              newState->value = (*rule_it)[i];
+                newState->index = i;
+                newState->value = (*rule_it)[i];
 
                 if (ptr != NULL) {
                     if (depth == 2) {
@@ -377,23 +378,10 @@ void buildStateMachine(cell_vector* ruleSet) {
                         ptr->next = newState;
                     }
                 } else {
-                    //if(false) {
-                    if(i == cache_lvl && newState->value == cache_value) {
-                        count++;
-                        idx_it = cache_cell;
-                    } else {
-                        kj++;
-                        if(kj < 5)
-                            printf("(i,v) (%d,%d)\n", i, (*rule_it)[i]);
                     //                    printf("INDEX %d added value %d\n", i, (*rule_it)[i]);
                     idx_it = mappedIndexes[i].lower_bound(newState->value);
                     if (idx_it->first != newState->value) {
                         idx_it = mappedIndexes[i].insert(idx_it, pair< cell_value, ContainFirst* >(newState->value, new ContainFirst));
-                    }
-                    
-                    cache_lvl = i;
-                    cache_value = newState->value;
-                    cache_cell = idx_it;
                     }
 
                 }
@@ -401,9 +389,9 @@ void buildStateMachine(cell_vector* ruleSet) {
                 ptr = newState;
             }
         }
-        
-        if (ptr != NULL) {
 
+        if (ptr != NULL) {
+            contador++; 
             StateNode *newState = new StateNode;
             newState->index = -1;
             newState->value = (*rule_it)[INPUT_SIZE];
@@ -433,7 +421,7 @@ void buildStateMachine(cell_vector* ruleSet) {
 
         rule_it++;
     }
-    cout << "skipped: " << count << endl;
+    cout << "contador dentro state::"<<contador << endl; 
     //    for (int i = 0; i < INPUT_SIZE; i++)
     //        cout << countIdx[i] << " ";
     //
