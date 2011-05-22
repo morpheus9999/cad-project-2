@@ -44,9 +44,14 @@ struct StateCompare {
     }
 };
 
+typedef vector<StateNode*> StateVector;
+typedef map< level, StateVector > LevelMap;
+
 struct ContainFirst {
-    map< level, vector<StateNode*>* > next;
+    LevelMap next;
 };
+
+typedef map< cell_value, ContainFirst > RootLevel;
 
 /* 
  * 
@@ -77,8 +82,8 @@ cell_vector* inputSet;
 FileHandler fileHandler;
 StateNode finalState[NUM_CLASS];
 vector<StateNode*> startIndex[INPUT_SIZE];
-    
-map< cell_value, ContainFirst* > mappedIndexes[INPUT_SIZE];
+
+RootLevel mappedIndexes[INPUT_SIZE];
 
 /* 
  * 
@@ -88,6 +93,9 @@ map< cell_value, ContainFirst* > mappedIndexes[INPUT_SIZE];
 
 int main(int argc, char** argv) {
     //264345972
+    cell_vector* ruleSet;
+    
+#ifdef MPI
     int numprocs, rank, namelen, i;
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     
@@ -98,9 +106,7 @@ int main(int argc, char** argv) {
     //MPI_Get_processor_name(processor_name, &namelen);
     numprocs=2;
     cout << numprocs << endl;
-    
-    cell_vector* ruleSet;
-    
+
     for(int i=0; i< numprocs;i++){
         cout << 1 << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
         ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
@@ -108,11 +114,13 @@ int main(int argc, char** argv) {
         //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
     
     cout << ruleSet->size() << endl;
+#else
     
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
-    //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv");
         //ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
-
+    
+#endif
     fileHandler.start();
     
 //    inputSet = fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
@@ -164,7 +172,9 @@ cout << "entra" << endl;
     
     pthread_mutex_destroy(&mutex_ID);
     pthread_exit(NULL);
+#ifdef MPI
 }
+#endif
     return 0;
 }
 
@@ -202,11 +212,11 @@ void *thread_work(void *id) {
         num_worked = 0;
         input_it = currentWorkFile->workVector->begin() + startIndex;
 
-        map< cell_value, ContainFirst* >::iterator mit;
-        map< level, vector<StateNode*>* >::iterator l_it;
+        RootLevel::iterator mit;
+        LevelMap::iterator l_it;
 
-        vector<StateNode*>::iterator it;
-
+        StateVector::iterator it;
+        
         StateNode cmp;
         StateNode *state;
         ContainFirst *fs;
@@ -224,14 +234,14 @@ void *thread_work(void *id) {
                 if (mit != mappedIndexes[i].end()) {
                     
                     // If so perform the next step - search for one that matches the second value
-                    fs = (*mit).second;
+                    fs = &((*mit).second);
 
                     l_it = fs->next.begin();
 
                     if (l_it->first == i) {
                         // If, for this rule there are no more distinct values required,
-                        //signal the fileHandler thread of a new matching pair (input, rule)
-                        for (it = l_it->second->begin(); it < l_it->second->end(); it++) {
+                         //signal the fileHandler thread of a new matching pair (input, rule)
+                        for (it = l_it->second.begin(); it < l_it->second.end(); it++) {
                             OUTPUT(currentWorkFile, *input_it, (*it)->value, my_id);
                         }
 
@@ -243,9 +253,9 @@ void *thread_work(void *id) {
 
                         cmp.value = (*input_it)[l_it->first];
 
-                        it = lower_bound(l_it->second->begin(), l_it->second->end(), &cmp, compareObj);
+                        it = lower_bound(l_it->second.begin(), l_it->second.end(), &cmp, compareObj);
 
-                        for (; it != l_it->second->end() && (*it)->value == cmp.value; it++) {
+                        for (; it != l_it->second.end() && (*it)->value == cmp.value; it++) {
 
                             state = (*it)->next;
 
@@ -314,6 +324,16 @@ void *thread_work(void *id) {
 //    }
 //}
 
+
+//typedef vector<StateNode*> StateVector;
+//typedef map< level, StateVector* > LevelMap;
+//
+//struct ContainFirst {
+//    LevelMap next;
+//};
+//
+//typedef map< cell_value, ContainFirst* > RootLevel;
+
 void buildStateMachine(cell_vector* ruleSet) {
 
     cell_vector::iterator rule_it = ruleSet->begin();
@@ -331,88 +351,85 @@ void buildStateMachine(cell_vector* ruleSet) {
     // startIndex[INPUT_SIZE];
     StateNode *ptr;
     //    bool hasIndex[10][10000];
-    map< cell_value, ContainFirst* >::iterator idx_it;
-    //    pair< map< cell_value, ContainFirst* >::iterator, bool> idx_it;
-    map< level, vector<StateNode*>* >::iterator map_it;
+    
+    LevelMap::iterator map_it;
 
+    StateVector* stateVector;
+    
+    StateNode* newState;
+    cell_value currentValue;
+    
+    
+    level         cache_level;
+    cell_value    cache_value;
+    ContainFirst* cache_firstState;
+    
     short depth;
-
-    ContainFirst *last;
+    
     int contador=0;
     while (rule_it < ruleSet->end()) {
         
         ptr = NULL;
         depth = 0;
+        
         for (int i = 0; i < INPUT_SIZE; i++) {
             if ((*rule_it)[i] != 0) {
-                //                countIdx[i]++;
-                //                sizes++;
+                
                 depth++;
-                StateNode *newState = new StateNode;
-                //                if(i==9 && (*rule_it)[i] == 5620)
-                //                    int b=0;
-                newState->index = i;
-                newState->value = (*rule_it)[i];
 
-                if (ptr != NULL) {
-                    if (depth == 2) {
-                        last = idx_it->second;
+                currentValue = (*rule_it)[i];
 
-                        map_it = last->next.lower_bound(i);
+                if (depth > 1) {
+                    
+                    newState = new StateNode;
 
-                        if (map_it != last->next.end() && map_it->first == i) {
-                            //                            printf("added in %d value %d\n", i, (*rule_it)[i]);
-                            map_it->second->push_back(newState);
-
-                        } else {
-                            //                            printf("created new level %d with %d\n", i, (*rule_it)[i]);
-                            map_it = last->next.insert(map_it, pair<level, vector<StateNode*>*>(i, new vector<StateNode*>));
-                            map_it->second->push_back(newState);
-                        }
-
-
-                        delete ptr;
-
-                    } else {
-
+                    newState->index = i;
+                    newState->value = currentValue;
+                    
+                    if (depth > 2) {
+                        
                         ptr->next = newState;
+                        
+                    } else {
+                        
+                        stateVector = &(cache_firstState->next[i]);
+                        stateVector->push_back(newState);
+                        
                     }
+                    
+                    ptr = newState;
+
                 } else {
-                    //                    printf("INDEX %d added value %d\n", i, (*rule_it)[i]);
-                    idx_it = mappedIndexes[i].lower_bound(newState->value);
-                    if (idx_it->first != newState->value) {
-                        idx_it = mappedIndexes[i].insert(idx_it, pair< cell_value, ContainFirst* >(newState->value, new ContainFirst));
+                    
+                    if (cache_value != currentValue || cache_level != i) {
+                        
+                        cache_level = i;
+                        cache_value = currentValue;
+                        cache_firstState = &((mappedIndexes[i])[currentValue]);
+                        
                     }
-
                 }
-
-                ptr = newState;
             }
         }
 
-        if (ptr != NULL) {
-            contador++; 
-            StateNode *newState = new StateNode;
+        if (depth != 0) {
+            contador++;
+            
+            newState = new StateNode;
+            
             newState->index = -1;
             newState->value = (*rule_it)[INPUT_SIZE];
 
             if (depth > 1) {
+                
                 newState->next = NULL;
                 ptr->next = newState;
+                
             } else {
-                last = ((mappedIndexes[ptr->index])[ptr->value]);
-
-                map_it = last->next.lower_bound(ptr->index);
-
-                if (map_it->first == ptr->value) {
-                    //                    printf("++added in %d value %d\n", ptr->index, (*rule_it)[INPUT_SIZE]);
-                    map_it->second->push_back(newState);
-
-                } else {
-                    //                    printf("++created new level %d with %d\n", ptr->index, (*rule_it)[INPUT_SIZE]);
-                    map_it = last->next.insert(map_it, pair<level, vector<StateNode*>*>(ptr->index, new vector<StateNode*>));
-                    map_it->second->push_back(newState);
-                }
+                
+                stateVector = &(cache_firstState->next[cache_level]);
+                stateVector->push_back(newState);
+                
             }
         } else {
             hasZeroRule = true;
@@ -428,12 +445,12 @@ void buildStateMachine(cell_vector* ruleSet) {
     //    cout << endl << " average size of rules: " << sizes / (float) 2000000 << endl;
     //    cout << endl << " number of empty rules: " << nulls << endl;
 
-    map<cell_value, ContainFirst*>::iterator pit;
+    RootLevel::iterator pit;
 
     for (int i = 0; i < INPUT_SIZE; i++) {
         for (pit = mappedIndexes[i].begin(); pit != mappedIndexes[i].end(); pit++) {
-            for (map_it = pit->second->next.begin(); map_it != pit->second->next.end(); map_it++) {
-                sort(map_it->second->begin(), map_it->second->end(), compareObj);
+            for (map_it = pit->second.next.begin(); map_it != pit->second.next.end(); map_it++) {
+                sort(map_it->second.begin(), map_it->second.end(), compareObj);
             }
         }
     }

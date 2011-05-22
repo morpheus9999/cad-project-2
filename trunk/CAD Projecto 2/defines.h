@@ -29,6 +29,8 @@
 
 #define NUM_FILES   1
 
+//#define MPI
+
 #ifndef SERIAL
 #define NUM_THREADS 1//4
 #else
