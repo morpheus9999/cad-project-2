@@ -234,7 +234,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         fileSize += file->output[i].size();
 //        printf("Thread %d added %d outputs\n", i, (int) file->output[i].size());
     }
-    cout << endl;
+    cout << "Output Size: " << fileSize << endl;
 #endif
     cout << "contador::"<<fileSize << endl; 
     fileSize *= RULE_SIZE * 6 * sizeof (char);
