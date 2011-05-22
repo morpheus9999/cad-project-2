@@ -29,6 +29,9 @@
 
 #define NUM_FILES   1
 
+#define NEW_STATE_CACHE_SIZE 1000
+#define MAX_STATE_CACHE_SIZE 50000
+
 //#define MPI
 
 #define OUTPUT(file, input, r_class) \

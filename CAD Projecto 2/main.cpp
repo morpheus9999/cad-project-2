@@ -263,12 +263,14 @@ void buildStateMachine(cell_vector* ruleSet) {
     StateNode* newState;
     cell_value currentValue;
     
+    int state_free = MAX_STATE_CACHE_SIZE;
+    StateNode* state_cache = new StateNode[MAX_STATE_CACHE_SIZE];
     
     Depth         cache_depth;
     cell_value    cache_value;
     ContainFirst* cache_firstState;
     
-    short depth;
+    Depth depth;
     
     int contador=0;
     while (rule_it < ruleSet->end()) {
@@ -282,11 +284,11 @@ void buildStateMachine(cell_vector* ruleSet) {
                 depth++;
 
                 currentValue = (*rule_it)[i];
-
+                
                 if (depth > 1) {
                     
-                    newState = new StateNode;
-
+                    newState = &state_cache[state_free--];
+                    
                     newState->index = i;
                     newState->value = currentValue;
                     
@@ -302,6 +304,13 @@ void buildStateMachine(cell_vector* ruleSet) {
                     }
                     
                     ptr = newState;
+                    
+                    if (state_free < 0) {
+                        
+                        state_free = NEW_STATE_CACHE_SIZE;
+                        state_cache = new StateNode[NEW_STATE_CACHE_SIZE];
+                        
+                    }
 
                 } else {
                     
@@ -325,7 +334,7 @@ void buildStateMachine(cell_vector* ruleSet) {
         if (depth != 0) {
             contador++;
             
-            newState = new StateNode;
+            newState = &state_cache[state_free--];
             
             newState->index = RULE_ACCEPTED_DEPTH;
             newState->value = currentValue;
@@ -341,6 +350,12 @@ void buildStateMachine(cell_vector* ruleSet) {
                 stateVector->push_back(newState);
                 
             }
+            
+            if (state_free < 0) {         
+               state_free = NEW_STATE_CACHE_SIZE;
+               state_cache = new StateNode[NEW_STATE_CACHE_SIZE];      
+            }
+            
         } else {
             hasZeroRule = true;
             zeroClass = currentValue;
@@ -348,6 +363,9 @@ void buildStateMachine(cell_vector* ruleSet) {
 
         rule_it++;
     }
+    
+    
+    
     cout << "contador dentro state::"<<contador << endl; 
     //    for (int i = 0; i < INPUT_SIZE; i++)
     //        cout << countIdx[i] << " ";
@@ -364,7 +382,7 @@ void buildStateMachine(cell_vector* ruleSet) {
             }
         }
     }
-
+    
     // Release space reserved by file handler for rules
     fileHandler.freeRuleSpace();
 
