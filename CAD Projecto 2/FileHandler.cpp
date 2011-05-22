@@ -18,7 +18,7 @@
 void* BeginReadingThread(void* p) {
     FileHandler *fh = (FileHandler *) p;
 
-    fh->startReadInputs();
+    fh->startFileHandlerThread();
 
     pthread_exit(NULL);
 }
@@ -41,8 +41,8 @@ FileHandler::FileHandler() {
 FileHandler::FileHandler(const FileHandler& orig) {
 }
 
-void FileHandler::addOutput(cell_array input, cell_value classf, int thread_id) {
-    inputHandler[0]->output[thread_id].push_back(pair<cell_array, cell_value>(input, classf));
+void FileHandler::addOutput(cell_array input, cell_value classf) {
+    inputHandler[0]->output.push_back(pair<cell_array, cell_value>(input, classf));
 }
 
 cell_vector* FileHandler::readRuleFile(const char* FileName) {
@@ -61,8 +61,7 @@ cell_vector* FileHandler::readRuleFileMPI(const char* FileName,int start,int end
 cell_vector* FileHandler::readInputFile(const char* FileName) {
     LoadedFile* newInput = readFile(FileName, INPUT_SIZE, INPUT_NUM, INPUT_NUM*INPUT_SIZE);
     
-    newInput->finished_work = 0;
-    newInput->availableWork = INPUT_NUM;
+    newInput->finished_work = false;
     pthread_mutex_init(&(newInput->mutex), NULL);
     pthread_cond_init (&(newInput->finished_cond), NULL);
     
@@ -79,41 +78,41 @@ void FileHandler::start() {
     }
 }
 
-void FileHandler::startReadInputs() {
+void FileHandler::startFileHandlerThread() {
     
     int files_read = 0;
-    int files_proc = 0;
+    int files_processed = 0;
     char inputFileName[80];
     char outputFileName[80];
-    LoadedFile* lf;
+    LoadedFile* loadedFile;
     
     do {
         
-        if( files_read - files_proc > 1 ) {
+        if( files_read - files_processed > 1 ) {
             
-            lf = inputHandler[files_proc];
+            loadedFile = inputHandler[files_processed];
             
             // Check to see if all threads have finished processing this input file
-            LOCK(lf->mutex);
-            COND_WAIT((lf->finished_work<NUM_THREADS), lf->finished_cond, lf->mutex)
-            UNLOCK(lf->mutex);
+            LOCK(loadedFile->mutex);
+            COND_WAIT(!loadedFile->finished_work, loadedFile->finished_cond, loadedFile->mutex)
+            UNLOCK(loadedFile->mutex);
             
-            sprintf(outputFileName, OUPUT_STRING, files_proc);
+            sprintf(outputFileName, OUPUT_STRING, files_processed);
             
             // Condition verified - begin output print
-            manageOutputOf( files_proc, outputFileName);
+            manageOutputOf( files_processed, outputFileName);
             
             // Cleaup resources used
-            pthread_mutex_destroy(&lf->mutex);
-            pthread_cond_destroy(&lf->finished_cond);
+            pthread_mutex_destroy(&loadedFile->mutex);
+            pthread_cond_destroy(&loadedFile->finished_cond);
             
-            delete lf->workVector;
-            delete lf->memoryBlock;
-            delete inputHandler[files_proc];
+            delete loadedFile->workVector;
+            delete loadedFile->memoryBlock;
+            delete inputHandler[files_processed];
             
-            inputHandler[files_proc] = NULL;
+            inputHandler[files_processed] = NULL;
             
-            files_proc++;
+            files_processed++;
         }
         
         sprintf(inputFileName, INPUT_STRING, files_read);
@@ -125,37 +124,37 @@ void FileHandler::startReadInputs() {
         LOCK(available_mutex);
         
         highest_available++;
+        COND_SIGNAL(available_cond);
         
-        COND_BROADCAST(available_cond);
         UNLOCK(available_mutex);
         
     }while(files_read < NUM_FILES);
 
     // All files have been read, process remaining files
-    while (files_proc < files_read) {
-        lf = inputHandler[files_proc];
+    while (files_processed < files_read) {
+        loadedFile = inputHandler[files_processed];
 
         // Check to see if all threads have finished processing this input file
-        LOCK(lf->mutex);
-        COND_WAIT((lf->finished_work < NUM_THREADS), lf->finished_cond, lf->mutex)
-        UNLOCK(lf->mutex);
+        LOCK(loadedFile->mutex);
+        COND_WAIT(!loadedFile->finished_work, loadedFile->finished_cond, loadedFile->mutex)
+        UNLOCK(loadedFile->mutex);
 
-        sprintf(outputFileName, OUPUT_STRING, files_proc);
+        sprintf(outputFileName, OUPUT_STRING, files_processed);
         
         // Condition verified - begin output print
-        manageOutputOf(files_proc, outputFileName);
+        manageOutputOf(files_processed, outputFileName);
 
         // Cleaup resources used
-        pthread_mutex_destroy(&lf->mutex);
-        pthread_cond_destroy(&lf->finished_cond);
+        pthread_mutex_destroy(&loadedFile->mutex);
+        pthread_cond_destroy(&loadedFile->finished_cond);
 
-        delete lf->workVector;
-        delete lf->memoryBlock;
-        delete inputHandler[files_proc];
+        delete loadedFile->workVector;
+        delete loadedFile->memoryBlock;
+        delete inputHandler[files_processed];
 
-        inputHandler[files_proc] = NULL;
+        inputHandler[files_processed] = NULL;
 
-        files_proc++;
+        files_processed++;
     }
     
     pthread_exit(NULL);
@@ -170,7 +169,7 @@ LoadedFile* FileHandler::getNextWorkFile(int file_id) {
         COND_WAIT((file_id > highest_available), available_cond, available_mutex)
 
         UNLOCK(available_mutex);
-
+        
         return inputHandler[file_id];
     } else {
         
@@ -199,8 +198,7 @@ unsigned long int FileHandler::getMemoryUsed() {
         totalSize += (*it)->workVector->size() * sizeof(cell_value*);
         totalSize += sizeof(unsigned int);
 
-        for(int i=0; i<NUM_THREADS; i++)
-            totalSize += (*it)->output[i].size() * sizeof( pair<cell_array, cell_value> );
+        totalSize += (*it)->output.size() * sizeof( pair<cell_array, cell_value> );
 
         it++;
     }
@@ -225,17 +223,9 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
     int fileSize = 0;
 
-#ifdef SERIAL
-    fileSize = file->output[0].size();
+    fileSize = file->output.size();
     printf("Found %d outputs\n", fileSize);
-#else
-    cout << endl;
-    for (int i = 0; i < NUM_THREADS; i++) {
-        fileSize += file->output[i].size();
-//        printf("Thread %d added %d outputs\n", i, (int) file->output[i].size());
-    }
-    cout << "Output Size: " << fileSize << endl;
-#endif
+    
     cout << "contador::"<<fileSize << endl; 
     fileSize *= RULE_SIZE * 6 * sizeof (char);
 
@@ -272,64 +262,58 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
     int idx = 0;
     cell_array t_id;
-    list< pair<cell_array, cell_value> >::iterator it;
+    list< OutputPair >::iterator it;
+    
     cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
 
-#ifdef SERIAL
-    int i = 0;
-#else
-    for (int i = 0; i < NUM_THREADS; i++) {
-#endif
-        for (it = file->output[i].begin(); it != file->output[i].end(); it++) {
-            t_id = &((*it).first[0]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[1]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[2]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[3]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[4]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[5]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[6]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[7]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[8]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            t_id = &((*it).first[9]);
-            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-            idx += lookupSizes[*t_id];
-            map[idx++] = ',';
-            memcpy(&map[idx], lookupTable[(*it).second], lookupSizes[(*it).second]);
-            idx += lookupSizes[(*it).second];
-            map[idx++] = '\n';
-        }
+    for (it = file->output.begin(); it != file->output.end(); it++) {
         
-#ifndef SERIAL
+        t_id = &((*it).first[0]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[1]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[2]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[3]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[4]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[5]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[6]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[7]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[8]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        t_id = &((*it).first[9]);
+        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+        idx += lookupSizes[*t_id];
+        map[idx++] = ',';
+        memcpy(&map[idx], lookupTable[(*it).second], lookupSizes[(*it).second]);
+        idx += lookupSizes[(*it).second];
+        map[idx++] = '\n';
+        
     }
-#endif
 
     map[idx] = '\0';
     close(fd);

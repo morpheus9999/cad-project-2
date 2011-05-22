@@ -45,13 +45,11 @@ struct StateCompare {
 };
 
 typedef vector<StateNode*> StateVector;
-typedef map< level, StateVector > LevelMap;
+typedef map< Depth, StateVector > LevelMap;
 
 struct ContainFirst {
-    LevelMap next;
+    LevelMap* next;
 };
-
-typedef map< cell_value, ContainFirst > RootLevel;
 
 /* 
  * 
@@ -59,7 +57,7 @@ typedef map< cell_value, ContainFirst > RootLevel;
  *
  */
 
-void* thread_work(void * id);
+void thread_work();
 void addZeroRuleOutput(cell_array input);
 
 void buildStateMachine(cell_vector* ruleSet);
@@ -83,7 +81,7 @@ FileHandler fileHandler;
 StateNode finalState[NUM_CLASS];
 vector<StateNode*> startIndex[INPUT_SIZE];
 
-RootLevel mappedIndexes[INPUT_SIZE];
+ContainFirst mappedIndexes[INPUT_SIZE][NUM_RANGE];
 
 /* 
  * 
@@ -121,12 +119,13 @@ int main(int argc, char** argv) {
         //ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
     
 #endif
+    
     fileHandler.start();
     
 //    inputSet = fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
     //        inputSet = fileHandler.readInputFile("dataset/sm_input.csv");
     //    inputSet = fileHandler.readInputFile("dataset/xs_input.csv");
-cout << "entra" << endl;
+    cout << "entra" << endl;
 
     buildStateMachine(ruleSet);
     
@@ -135,129 +134,79 @@ cout << "entra" << endl;
     
    // return 0;
     
-    pthread_t thread[NUM_THREADS];
-    int threads[NUM_THREADS];
-    pthread_attr_t attr;
-    int rc;
-    long t;
-    void *status;
-
-    work_ID = 0;
-
-    // Create mutex for work ID access
-    pthread_mutex_init(&mutex_ID, NULL);
-
-    /* Initialize and set thread detached attribute */
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-    for (t = 0; t < NUM_THREADS; t++) {
-        threads[t]=t;
-        rc = pthread_create(&thread[t], &attr, thread_work,  &threads[t]);
-        if (rc) {
-            printf("ERROR; return code from pthread_create() is % d\n", rc);
-            exit(-1);
-        }
-    }
-
-    /* Free attribute and wait for the other threads */
-    pthread_attr_destroy(&attr);
-    for (t = 0; t < NUM_THREADS; t++) {
-        rc = pthread_join(thread[t], &status);
-        if (rc) {
-            printf("ERROR; return code from pthread_join() is % d\n", rc);
-            exit(-1);
-        }
-    }
+    thread_work();
     
-    pthread_mutex_destroy(&mutex_ID);
-    pthread_exit(NULL);
 #ifdef MPI
 }
 #endif
     return 0;
 }
 
-void *thread_work(void *id) {
-    int my_id = *((int*) id);
+void thread_work() {
+
+    int fileId = 0;
     
-    int num_worked, startIndex, fileId = 0;
-
-    LOCK(mutex_ID);
-    // Determine working ID
-    my_id = work_ID++;
-    cout << "Thread " << my_id << " reporting in" << endl;
-    UNLOCK(mutex_ID);
-
     // Get a work item - Current Work File (CWF)
     LoadedFile* currentWorkFile = fileHandler.getNextWorkFile(fileId);
     cell_vector::iterator input_it;
+
+    LevelMap::iterator depth_iterator;
+
+    StateVector::iterator stateMachine_iterator;
+
+    StateNode valueToFind;
+    StateNode *state;
+    ContainFirst *first_state;
+    
+    clock_t s = clock();
     
     do {
-    
-    while (true) {
-        
-        // Get an available input block to work with
-        LOCK(currentWorkFile->mutex);
-        startIndex = currentWorkFile->availableWork - 1;
-        currentWorkFile->availableWork -= WORK_RANGE;
-        UNLOCK(currentWorkFile->mutex);
 
-        // check for empty
-        if (startIndex < 0) {
-            break;
-        }
-        
-        // Determine work block starting position
-        num_worked = 0;
-        input_it = currentWorkFile->workVector->begin() + startIndex;
-
-        RootLevel::iterator mit;
-        LevelMap::iterator l_it;
-
-        StateVector::iterator it;
-        
-        StateNode cmp;
-        StateNode *state;
-        ContainFirst *fs;
+        input_it = currentWorkFile->workVector->begin();
 
         // While there is work in this work block
-        while (num_worked < WORK_RANGE) {
-            
+        while (input_it < currentWorkFile->workVector->end()) {
+
             // For each input value inside the selected input
             for (int i = 0; i < INPUT_SIZE; i++) {
-                cmp.value = (*input_it)[i];
-
+                valueToFind.value = (*input_it)[i];
+                
                 // Check if there is a rule that begins with the same value
-                mit = mappedIndexes[i].find(cmp.value);
 
-                if (mit != mappedIndexes[i].end()) {
-                    
+                first_state = &(mappedIndexes[i][valueToFind.value]);
+                
+                if (first_state->next != NULL) {
+
                     // If so perform the next step - search for one that matches the second value
-                    fs = &((*mit).second);
+                    depth_iterator = first_state->next->begin();
 
-                    l_it = fs->next.begin();
-
-                    if (l_it->first == i) {
+                    if (depth_iterator->first == i) {
                         // If, for this rule there are no more distinct values required,
-                         //signal the fileHandler thread of a new matching pair (input, rule)
-                        for (it = l_it->second.begin(); it < l_it->second.end(); it++) {
-                            OUTPUT(currentWorkFile, *input_it, (*it)->value, my_id);
+                        //signal the fileHandler thread of a new matching pair (input, rule)
+                        for (stateMachine_iterator = depth_iterator->second.begin()
+                                ; stateMachine_iterator < depth_iterator->second.end()
+                                ; stateMachine_iterator++) {
+                            OUTPUT(currentWorkFile, *input_it, (*stateMachine_iterator)->value);
                         }
 
-                        l_it++;
+                        depth_iterator++;
                     }
 
                     // Now we need to 
-                    while (l_it != fs->next.end()) {
+                    while (depth_iterator != first_state->next->end()) {
 
-                        cmp.value = (*input_it)[l_it->first];
+                        valueToFind.value = (*input_it)[depth_iterator->first];
 
-                        it = lower_bound(l_it->second.begin(), l_it->second.end(), &cmp, compareObj);
+                        stateMachine_iterator = lower_bound(depth_iterator->second.begin()
+                                , depth_iterator->second.end()
+                                , &valueToFind
+                                , compareObj);
 
-                        for (; it != l_it->second.end() && (*it)->value == cmp.value; it++) {
+                        for (; stateMachine_iterator != depth_iterator->second.end()
+                                && (*stateMachine_iterator)->value == valueToFind.value
+                                ; stateMachine_iterator++) {
 
-                            state = (*it)->next;
+                            state = (*stateMachine_iterator)->next;
 
                             while (true) {
 
@@ -269,88 +218,43 @@ void *thread_work(void *id) {
                                         state = state->next;
                                     }
                                 } else {
-                                    OUTPUT(currentWorkFile, *input_it, state->value, my_id);
+                                    OUTPUT(currentWorkFile, *input_it, state->value);
                                     break;
                                 }
                             }
                         }
 
-                        l_it++;
+                        depth_iterator++;
                     }
                 }
             }
 
             if (hasZeroRule)
-                OUTPUT(currentWorkFile, *input_it, zeroClass, my_id);
+                OUTPUT(currentWorkFile, *input_it, zeroClass);
 
-            num_worked++;
-            input_it--;
+            input_it++;
         }
-    }
-    
-    fileId++;
-    
-    currentWorkFile->finished();
-    
-    currentWorkFile = fileHandler.getNextWorkFile(fileId);
-    
-    } while(currentWorkFile != NULL);
-    
-    LOCK(mutex_ID);
-    cout << "Thread " << my_id << " handled " << num_worked << " exited\n";
-    UNLOCK(mutex_ID);
 
+        fileId++;
+
+        currentWorkFile->finished();
+
+        currentWorkFile = fileHandler.getNextWorkFile(fileId);
+
+    } while (currentWorkFile != NULL);
+
+    cout << "\nExecution took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
+    
     pthread_exit((void*) 0);
 }
-
-//void printSM(TreeNode* state, int d) {
-//    
-//    MapLevel::iterator level_it;
-//    MapNode::iterator  node_it;
-//    
-//    for(level_it = state->mappedLevels.begin(); level_it != state->mappedLevels.end(); level_it++) {
-//
-//        for(node_it = (*level_it).second.begin(); node_it != (*level_it).second.end(); node_it++) {
-//            
-//            for (int i = 0; i < d; i++) {
-//                cout << "  ";
-//            }
-//            
-//            printf("(%d, %d)\n", (*node_it).first, (*level_it).first);
-//            
-//            if( (*node_it).second != NULL )
-//                printSM( (*node_it).second, d+1);
-//        }
-//    }
-//}
-
-
-//typedef vector<StateNode*> StateVector;
-//typedef map< level, StateVector* > LevelMap;
-//
-//struct ContainFirst {
-//    LevelMap next;
-//};
-//
-//typedef map< cell_value, ContainFirst* > RootLevel;
 
 void buildStateMachine(cell_vector* ruleSet) {
 
     cell_vector::iterator rule_it = ruleSet->begin();
-    // 980000,744000,744000,744000,720000,720000,716000,712000,712000,708000,
-    // 3.75
 
     clock_t s = clock();
 
-    //    int countIdx[INPUT_SIZE];
-    //    int sizes, nulls;
-    //    sizes = 0, nulls = 0;
-    //    countIdx[0] = countIdx[1] = countIdx[2] = countIdx[3] = countIdx[4] = 0;
-    //    countIdx[5] = countIdx[6] = countIdx[7] = countIdx[8] = countIdx[9] = 0;
-
-    // startIndex[INPUT_SIZE];
     StateNode *ptr;
-    //    bool hasIndex[10][10000];
     
     LevelMap::iterator map_it;
 
@@ -360,7 +264,7 @@ void buildStateMachine(cell_vector* ruleSet) {
     cell_value currentValue;
     
     
-    level         cache_level;
+    Depth         cache_depth;
     cell_value    cache_value;
     ContainFirst* cache_firstState;
     
@@ -392,7 +296,7 @@ void buildStateMachine(cell_vector* ruleSet) {
                         
                     } else {
                         
-                        stateVector = &(cache_firstState->next[i]);
+                        stateVector = &((*cache_firstState->next)[i]);
                         stateVector->push_back(newState);
                         
                     }
@@ -401,24 +305,30 @@ void buildStateMachine(cell_vector* ruleSet) {
 
                 } else {
                     
-                    if (cache_value != currentValue || cache_level != i) {
+                    if (cache_value != currentValue || cache_depth != i) {
                         
-                        cache_level = i;
+                        cache_depth = i;
                         cache_value = currentValue;
-                        cache_firstState = &((mappedIndexes[i])[currentValue]);
+                        cache_firstState = &(mappedIndexes[i][currentValue]);
+                        
+                        if(cache_firstState->next == NULL) {
+                            cache_firstState->next = new LevelMap();
+                        }
                         
                     }
                 }
             }
         }
 
+        currentValue = (*rule_it)[INPUT_SIZE];
+        
         if (depth != 0) {
             contador++;
             
             newState = new StateNode;
             
-            newState->index = -1;
-            newState->value = (*rule_it)[INPUT_SIZE];
+            newState->index = RULE_ACCEPTED_DEPTH;
+            newState->value = currentValue;
 
             if (depth > 1) {
                 
@@ -427,13 +337,13 @@ void buildStateMachine(cell_vector* ruleSet) {
                 
             } else {
                 
-                stateVector = &(cache_firstState->next[cache_level]);
+                stateVector = &((*cache_firstState->next)[cache_depth]);
                 stateVector->push_back(newState);
                 
             }
         } else {
             hasZeroRule = true;
-            zeroClass = (*rule_it)[INPUT_SIZE];
+            zeroClass = currentValue;
         }
 
         rule_it++;
@@ -445,12 +355,12 @@ void buildStateMachine(cell_vector* ruleSet) {
     //    cout << endl << " average size of rules: " << sizes / (float) 2000000 << endl;
     //    cout << endl << " number of empty rules: " << nulls << endl;
 
-    RootLevel::iterator pit;
-
     for (int i = 0; i < INPUT_SIZE; i++) {
-        for (pit = mappedIndexes[i].begin(); pit != mappedIndexes[i].end(); pit++) {
-            for (map_it = pit->second.next.begin(); map_it != pit->second.next.end(); map_it++) {
-                sort(map_it->second.begin(), map_it->second.end(), compareObj);
+        for (int j = 0; j < 10000; j++) {
+            if (mappedIndexes[i][j].next != NULL) {
+                for (map_it = mappedIndexes[i][j].next->begin(); map_it != mappedIndexes[i][j].next->end(); map_it++) {
+                    sort(map_it->second.begin(), map_it->second.end(), compareObj);
+                }
             }
         }
     }

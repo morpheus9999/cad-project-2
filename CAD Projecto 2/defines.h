@@ -25,20 +25,14 @@
 
 #define NUM_CLASS   100
 
-#define RULE_ACCEPTED_LEVEL -1
+#define RULE_ACCEPTED_DEPTH -1
 
 #define NUM_FILES   1
 
 //#define MPI
 
-#ifndef SERIAL
-#define NUM_THREADS 1//4
-#else
-#define NUM_THREADS 1 // DO NOT CHANGE
-#endif
-
-#define OUTPUT(file, input, r_class, t_id) \
-(file)->output[(t_id)].push_back(pair<cell_array, cell_value>((input), (r_class)))
+#define OUTPUT(file, input, r_class) \
+(file)->output.push_back(OutputPair((input), (r_class)))
 
 #define INPUT_STRING "dataset/THE_PROBLEM/trans_day_%d.csv"
 #define OUPUT_STRING "dataset/THE_PROBLEM/output_%d.csv"
@@ -56,11 +50,11 @@ while ( cond ) {   \
 
 using namespace std;
 
-typedef short*  cell_array;
 typedef short   cell_value;
-typedef vector<short*> cell_vector;
 
-typedef short level;
+typedef cell_value Depth;
+typedef cell_value* cell_array;
+typedef vector<cell_value*> cell_vector;
 
 #endif	/* DEFINES_H */
 

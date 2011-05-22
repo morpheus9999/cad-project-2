@@ -12,6 +12,8 @@
 
 #define MAX_RULES 2000000
 
+typedef pair<cell_array, cell_value> OutputPair;
+
 struct LoadedFile {
     cell_array memoryBlock;
     cell_vector* workVector;
@@ -20,17 +22,16 @@ struct LoadedFile {
     pthread_mutex_t mutex;
     pthread_cond_t  finished_cond;
     
-    int availableWork;
-    int finished_work;
+    bool finished_work;
     
-    list< pair<cell_array, cell_value> > output[NUM_THREADS];
+    list< OutputPair > output;
     
     void finished() {
         
         LOCK(mutex);
         
-        if (++finished_work == NUM_THREADS)
-            COND_SIGNAL(finished_cond);
+        finished_work = true;
+        COND_SIGNAL(finished_cond);
         
         UNLOCK(mutex);
     }
@@ -50,13 +51,13 @@ public:
     
     void start();
     
-    void startReadInputs();
+    void startFileHandlerThread();
     
     LoadedFile* getNextWorkFile(int file_id);
     
     void manageOutputOf(int file_id, const char* fileName);
 
-    void addOutput(cell_array input, cell_value classf, int thread_id=0);
+    void addOutput(cell_array input, cell_value classf);
 
     unsigned long int getMemoryUsed();
     
