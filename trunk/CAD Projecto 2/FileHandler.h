@@ -12,7 +12,7 @@
 
 #define MAX_RULES 2000000
 
-typedef pair<cell_array, cell_value> OutputPair;
+typedef pair<int, cell_value> OutputPair;
 
 struct LoadedFile {
     cell_array memoryBlock;
@@ -38,6 +38,7 @@ struct LoadedFile {
 };
 
 void* BeginReadingThread(void* p);
+void* BeginWritingThread(void* p);
 
 class FileHandler {
 public:
@@ -52,12 +53,11 @@ public:
     void start();
     
     void startFileHandlerThread();
+    void startMPIreceiveThread();
     
     LoadedFile* getNextWorkFile(int file_id);
     
     void manageOutputOf(int file_id, const char* fileName);
-
-    void addOutput(cell_array input, cell_value classf);
 
     unsigned long int getMemoryUsed();
     
@@ -79,7 +79,8 @@ private:
     LoadedFile* ruleHandler;
     vector<LoadedFile*> inputHandler;
     
-    pthread_t thread;
+    pthread_t read_thread;
+    pthread_t write_thread;
     
     /* Access control */
     pthread_mutex_t available_mutex;

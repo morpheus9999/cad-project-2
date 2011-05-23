@@ -23,6 +23,14 @@ void* BeginReadingThread(void* p) {
     pthread_exit(NULL);
 }
 
+void* BeginWritingThread(void* p) {
+    FileHandler *fh = (FileHandler *) p;
+
+    fh->startMPIreceiveThread();
+
+    pthread_exit(NULL);
+}
+
 FileHandler::FileHandler() {
     ruleHandler = NULL;
     for (int i = 0; i < NUM_RANGE; i += 5) {
@@ -39,10 +47,6 @@ FileHandler::FileHandler() {
 }
 
 FileHandler::FileHandler(const FileHandler& orig) {
-}
-
-void FileHandler::addOutput(cell_array input, cell_value classf) {
-    inputHandler[0]->output.push_back(pair<cell_array, cell_value>(input, classf));
 }
 
 cell_vector* FileHandler::readRuleFile(const char* FileName) {
@@ -71,11 +75,21 @@ cell_vector* FileHandler::readInputFile(const char* FileName) {
 }
 
 void FileHandler::start() {
-    int rc = pthread_create(&thread, NULL, BeginReadingThread, (void *) this);
+    int rc = pthread_create(&read_thread, NULL, BeginReadingThread, (void *) this);
     if (rc) {
         printf("ERROR in FileHandler; return code from pthread_create() is % d\n", rc);
         exit(-1);
     }
+    
+    rc = pthread_create(&write_thread, NULL, BeginWritingThread, (void *) this);
+    if (rc) {
+        printf("ERROR in FileHandler; return code from pthread_create() is % d\n", rc);
+        exit(-1);
+    }
+}
+
+void FileHandler::startMPIreceiveThread() {
+    
 }
 
 void FileHandler::startFileHandlerThread() {
@@ -260,55 +274,67 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         exit(EXIT_FAILURE);
     }
 
-    int idx = 0;
+    int idx = 0, pos = 0;
     cell_array t_id;
     list< OutputPair >::iterator it;
     
     cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
-
+    
     for (it = file->output.begin(); it != file->output.end(); it++) {
         
-        t_id = &((*it).first[0]);
+        t_id = (*file->workVector)[((*it).first)];
+        int f=(*it).first;
+        //t_id = &((*it).first[0]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[1]);
+        t_id++;
+        //t_id &((*it).first[1]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[2]);
+        t_id++;
+        //t_id &((*it).first[2]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[3]);
+        t_id++;
+        //t_id &((*it).first[3]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[4]);
+        t_id++;
+        //t_id &((*it).first[4]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[5]);
+        t_id++;
+        //t_id &((*it).first[5]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[6]);
+        t_id++;
+        //t_id &((*it).first[6]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[7]);
+        t_id++;
+        //t_id &((*it).first[7]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[8]);
+        t_id++;
+        //t_id &((*it).first[8]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
-        t_id = &((*it).first[9]);
+        t_id++;
+        //t_id &((*it).first[9]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
+        t_id++;
         memcpy(&map[idx], lookupTable[(*it).second], lookupSizes[(*it).second]);
         idx += lookupSizes[(*it).second];
         map[idx++] = '\n';
