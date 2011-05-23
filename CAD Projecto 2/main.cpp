@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
     ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv");
-        //ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
+    //    ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
     
 #endif
     
@@ -160,6 +160,8 @@ void thread_work() {
     
     clock_t s = clock();
     
+    int input_index=0;
+    
     do {
 
         input_it = currentWorkFile->workVector->begin();
@@ -186,7 +188,7 @@ void thread_work() {
                         for (stateMachine_iterator = depth_iterator->second.begin()
                                 ; stateMachine_iterator < depth_iterator->second.end()
                                 ; stateMachine_iterator++) {
-                            OUTPUT(currentWorkFile, *input_it, (*stateMachine_iterator)->value);
+                            OUTPUT(currentWorkFile, input_index, (*stateMachine_iterator)->value);
                         }
 
                         depth_iterator++;
@@ -218,7 +220,7 @@ void thread_work() {
                                         state = state->next;
                                     }
                                 } else {
-                                    OUTPUT(currentWorkFile, *input_it, state->value);
+                                    OUTPUT(currentWorkFile, input_index, state->value);
                                     break;
                                 }
                             }
@@ -230,9 +232,10 @@ void thread_work() {
             }
 
             if (hasZeroRule)
-                OUTPUT(currentWorkFile, *input_it, zeroClass);
+                OUTPUT(currentWorkFile, input_index, zeroClass);
 
             input_it++;
+            input_index++;
         }
 
         fileId++;
@@ -299,7 +302,7 @@ void buildStateMachine(cell_vector* ruleSet) {
                     } else {
                         
                         stateVector = &((*cache_firstState->next)[i]);
-                        stateVector->push_back(newState);
+                        stateVector->push_back(newState); // Consuming 30% of the total time.
                         
                     }
                     
@@ -374,7 +377,7 @@ void buildStateMachine(cell_vector* ruleSet) {
     //    cout << endl << " number of empty rules: " << nulls << endl;
 
     for (int i = 0; i < INPUT_SIZE; i++) {
-        for (int j = 0; j < 10000; j++) {
+        for (int j = 0; j < NUM_RANGE; j++) {
             if (mappedIndexes[i][j].next != NULL) {
                 for (map_it = mappedIndexes[i][j].next->begin(); map_it != mappedIndexes[i][j].next->end(); map_it++) {
                     sort(map_it->second.begin(), map_it->second.end(), compareObj);
