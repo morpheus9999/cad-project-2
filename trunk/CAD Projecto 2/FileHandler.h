@@ -12,7 +12,17 @@
 
 #define MAX_RULES 2000000
 
-typedef pair<int, cell_value> OutputPair;
+//typedef pair<int, cell_value> OutputPair;
+
+struct OutputPair {
+    int index;
+    short rule;
+    
+    OutputPair(int n_index, short n_rule) {
+        index = n_index;
+        rule = n_rule;
+    }
+};
 
 struct LoadedFile {
     cell_array memoryBlock;
@@ -24,7 +34,7 @@ struct LoadedFile {
     
     bool finished_work;
     
-    list< OutputPair > output;
+    vector< OutputPair > output;
     
     void finished() {
         

@@ -274,17 +274,17 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         exit(EXIT_FAILURE);
     }
 
-    int idx = 0, pos = 0;
+    int idx = 0;
     cell_array t_id;
-    list< OutputPair >::iterator it;
+    vector< OutputPair >::iterator it;
     
     cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
     
-    for (it = file->output.begin(); it != file->output.end(); it++) {
+    for (it = file->output.begin(); it < file->output.end(); it++) {
         
-        t_id = (*file->workVector)[((*it).first)];
-        int f=(*it).first;
+        t_id = (*file->workVector)[((*it).index)];
+        
         //t_id = &((*it).first[0]);
         memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
         idx += lookupSizes[*t_id];
@@ -335,8 +335,8 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         idx += lookupSizes[*t_id];
         map[idx++] = ',';
         t_id++;
-        memcpy(&map[idx], lookupTable[(*it).second], lookupSizes[(*it).second]);
-        idx += lookupSizes[(*it).second];
+        memcpy(&map[idx], lookupTable[(*it).rule], lookupSizes[(*it).rule]);
+        idx += lookupSizes[(*it).rule];
         map[idx++] = '\n';
         
     }
