@@ -12,11 +12,12 @@
 #include <cmath>
 #include <time.h>
 
+
 #include "mpi.h"
 
 #include "FileHandler.h"
 
-using namespace MPI;
+using namespace std;
 
 /* 
  * 
@@ -57,7 +58,7 @@ struct ContainFirst {
  *
  */
 
-void thread_work();
+void thread_work(int rank);
 void addZeroRuleOutput(cell_array input);
 
 void buildStateMachine(cell_vector* ruleSet);
@@ -92,61 +93,103 @@ ContainFirst mappedIndexes[INPUT_SIZE][NUM_RANGE];
 int main(int argc, char** argv) {
     //264345972
     cell_vector* ruleSet;
+    time_t start_time= 0;
+    time_t end_time= 0;
+    cout<< "MPI" << endl;
+    
+    
     
 #ifdef MPI
-    int numprocs, rank, namelen, i;
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
     
-    MPI_Status stat;
+    MPI_Status status;
+    MPI_Comm comm;
+    comm = MPI_COMM_WORLD;
+    
+    int numprocs=1, rank=0, namelen;
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    double wtime;
+    
+    wtime = MPI_Wtime();
+    
+    //MPI_Status stat;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    //MPI_Get_processor_name(processor_name, &namelen);
-    numprocs=2;
-    cout << numprocs << endl;
-
-    for(int i=0; i< numprocs;i++){
-        cout << 1 << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
-        ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
-        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",0*RULE_NUM,RULE_NUM/2);
-        //ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    MPI_Get_processor_name(processor_name, &namelen);
     
-    cout << ruleSet->size() << endl;
+    //numprocs=1;
+    cout <<"NUM processes:" <<numprocs << endl;
+    cout <<"NUM rank:" <<rank << endl;
+    cout << "NOME DO PC:::" << processor_name << endl;
+    fileHandler.setRank(rank);
+    fileHandler.setStat(status);
+    fileHandler.setNumProcess(numprocs);
+    
+
+        cout  << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
+        ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
+        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",rank*RULE_NUM,RULE_NUM/numprocs);
+        
 #else
     
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
-    ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv");
+    ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
     //    ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
     
 #endif
     
-    fileHandler.start();
+    threadPair tp = fileHandler.start();
     
 //    inputSet = fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
     //        inputSet = fileHandler.readInputFile("dataset/sm_input.csv");
     //    inputSet = fileHandler.readInputFile("dataset/xs_input.csv");
-    cout << "entra" << endl;
-
+    //cout << "entra" << endl;
+    start_time=time(NULL);
     buildStateMachine(ruleSet);
-    
-    cout << "Printing tree\n";
+    end_time =time(NULL);
+    cout << "Tempo makina estados::  "<< end_time-start_time << endl;
+    //cout << "Printing tree\n";
     //printSM(root, 0);
     
    // return 0;
     
-    thread_work();
+    thread_work(rank);
     
+    
+  
 #ifdef MPI
-}
-#endif
+    
+    if(rank==0){
+        pthread_join(tp.first,NULL);
+        pthread_join(tp.second,NULL);
+        
+        
+        wtime = MPI_Wtime() - wtime;
+        cout << "TEMPO::: " << wtime << endl; 
+        
+    }else{
+        pthread_join(tp.first,NULL);
+    }
+    cout << "::::ACABA:::: " <<rank  << endl;
+    
+    MPI_Finalize();
+    
+ #endif   
+
+    
+    
+    pthread_exit((void*) 0);    
     return 0;
 }
 
-void thread_work() {
+void thread_work(int rank) {
 
     int fileId = 0;
     
     // Get a work item - Current Work File (CWF)
+    
+    
+    
     LoadedFile* currentWorkFile = fileHandler.getNextWorkFile(fileId);
     cell_vector::iterator input_it;
 
@@ -188,7 +231,7 @@ void thread_work() {
                         for (stateMachine_iterator = depth_iterator->second.begin()
                                 ; stateMachine_iterator < depth_iterator->second.end()
                                 ; stateMachine_iterator++) {
-                            OUTPUT(currentWorkFile, input_index, (*stateMachine_iterator)->value);
+                            OUTPUT(currentWorkFile, input_index, (*stateMachine_iterator)->value,rank);
                         }
 
                         depth_iterator++;
@@ -220,7 +263,7 @@ void thread_work() {
                                         state = state->next;
                                     }
                                 } else {
-                                    OUTPUT(currentWorkFile, input_index, state->value);
+                                    OUTPUT(currentWorkFile, input_index, state->value,rank);
                                     break;
                                 }
                             }
@@ -232,14 +275,14 @@ void thread_work() {
             }
 
             if (hasZeroRule)
-                OUTPUT(currentWorkFile, input_index, zeroClass);
+                OUTPUT(currentWorkFile, input_index, zeroClass,rank);
 
             input_it++;
             input_index++;
         }
 
         fileId++;
-
+        
         currentWorkFile->finished();
 
         currentWorkFile = fileHandler.getNextWorkFile(fileId);
@@ -248,7 +291,7 @@ void thread_work() {
 
     cout << "\nExecution took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
     
-    pthread_exit((void*) 0);
+    
 }
 
 void buildStateMachine(cell_vector* ruleSet) {

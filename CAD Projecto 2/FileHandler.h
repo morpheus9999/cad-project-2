@@ -9,6 +9,7 @@
 #define	FILEHANDLER_H
 
 #include "defines.h"
+//#include "mpi.h"
 
 #define MAX_RULES 2000000
 
@@ -24,6 +25,8 @@ struct OutputPair {
     }
 };
 
+typedef vector< OutputPair > outputVector;
+
 struct LoadedFile {
     cell_array memoryBlock;
     cell_vector* workVector;
@@ -34,14 +37,14 @@ struct LoadedFile {
     
     bool finished_work;
     
-    vector< OutputPair > output;
+    outputVector* output;
     
     void finished() {
         
         LOCK(mutex);
         
         finished_work = true;
-        COND_SIGNAL(finished_cond);
+        COND_BROADCAST(finished_cond);
         
         UNLOCK(mutex);
     }
@@ -60,7 +63,7 @@ public:
     cell_vector* readRuleFileMPI(const char* FileName, int start, int end);
     cell_vector* readInputFile(const char* FileName);
     
-    void start();
+    threadPair start();
     
     void startFileHandlerThread();
     void startMPIreceiveThread();
@@ -70,6 +73,11 @@ public:
     void manageOutputOf(int file_id, const char* fileName);
 
     unsigned long int getMemoryUsed();
+    
+    void setRank(int rank);
+    
+    void setNumProcess(int num_process);
+    void setStat(MPI_Status status);
     
     void freeRuleSpace();
 
@@ -81,6 +89,15 @@ private:
     int highest_available;
     
     /* Atributes */
+    
+   
+    int x;
+    
+
+    int rank;
+    int num_process;
+    MPI_Status status;
+    int* num_ficheiro;
     char*       tokenPtr;
 
     char        lookupTable[NUM_RANGE+1][7];
@@ -88,6 +105,9 @@ private:
 
     LoadedFile* ruleHandler;
     vector<LoadedFile*> inputHandler;
+    
+    //vector <vector <int> > seila;
+    
     
     pthread_t read_thread;
     pthread_t write_thread;

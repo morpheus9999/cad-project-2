@@ -12,6 +12,7 @@
 #include <list>
 #include <algorithm>
 #include <map>
+#include <mpi.h>
 
 #define RULE_SIZE   11
 #define INPUT_SIZE  10
@@ -32,10 +33,10 @@
 #define NEW_STATE_CACHE_SIZE 1000
 #define MAX_STATE_CACHE_SIZE 50000
 
-//#define MPI
+#define MPI
 
-#define OUTPUT(file, input, r_class) \
-(file)->output.push_back(OutputPair((input), (r_class)))
+#define OUTPUT(file, input, r_class, id) \
+(file)->output[(id)].push_back(OutputPair((input), (r_class)))
 
 #define INPUT_STRING "dataset/THE_PROBLEM/trans_day_%d.csv"
 #define OUPUT_STRING "dataset/THE_PROBLEM/output_%d.csv"
@@ -58,6 +59,7 @@ typedef short   cell_value;
 typedef cell_value Depth;
 typedef cell_value* cell_array;
 typedef vector<cell_value*> cell_vector;
+typedef pair<pthread_t, pthread_t> threadPair;
 
 #endif	/* DEFINES_H */
 

@@ -15,6 +15,9 @@
 // TODO : remove useless libraries <iostream>
 #include <iostream>
 
+
+
+
 void* BeginReadingThread(void* p) {
     FileHandler *fh = (FileHandler *) p;
 
@@ -42,7 +45,7 @@ FileHandler::FileHandler() {
     }
 
     lookupSizes[NUM_RANGE] = sprintf(lookupTable[NUM_RANGE], "%d", NUM_RANGE);
-    
+
     highest_available = -1;
 }
 
@@ -50,99 +53,197 @@ FileHandler::FileHandler(const FileHandler& orig) {
 }
 
 cell_vector* FileHandler::readRuleFile(const char* FileName) {
-    LoadedFile* newRule = readFile(FileName, RULE_SIZE, RULE_NUM, RULE_NUM*RULE_SIZE);
+    LoadedFile* newRule = readFile(FileName, RULE_SIZE, RULE_NUM, RULE_NUM * RULE_SIZE);
     ruleHandler = newRule;
 
     return newRule->workVector;
 }
-cell_vector* FileHandler::readRuleFileMPI(const char* FileName,int start,int end) {
-    LoadedFile* newRule = readFileMPI(FileName, RULE_SIZE, RULE_NUM-end, (RULE_NUM-end)*RULE_SIZE,start,end);
+
+cell_vector* FileHandler::readRuleFileMPI(const char* FileName, int start, int end) {
+    LoadedFile* newRule = readFileMPI(FileName, RULE_SIZE, RULE_NUM - end, (RULE_NUM - end) * RULE_SIZE, start, end);
     ruleHandler = newRule;
 
     return newRule->workVector;
 }
 
 cell_vector* FileHandler::readInputFile(const char* FileName) {
-    LoadedFile* newInput = readFile(FileName, INPUT_SIZE, INPUT_NUM, INPUT_NUM*INPUT_SIZE);
-    
+    LoadedFile* newInput = readFile(FileName, INPUT_SIZE, INPUT_NUM, INPUT_NUM * INPUT_SIZE);
+
     newInput->finished_work = false;
     pthread_mutex_init(&(newInput->mutex), NULL);
-    pthread_cond_init (&(newInput->finished_cond), NULL);
-    
+    pthread_cond_init(&(newInput->finished_cond), NULL);
+
     inputHandler.push_back(newInput);
 
     return newInput->workVector;
 }
 
-void FileHandler::start() {
+void FileHandler::setRank(int rank){
+    this->rank=rank;
+}
+void FileHandler::setNumProcess(int num_process){
+    this->num_process=num_process;
+    num_ficheiro = new int[num_process];
+    for(int i =0 ;i<num_process;i++)
+        num_ficheiro[i]=0;
+}
+void FileHandler::setStat(MPI_Status status){
+    this->status=status;
+}
+
+threadPair FileHandler::start() {
+    
+    cout << "RANK :::::" << rank << endl;
+    
     int rc = pthread_create(&read_thread, NULL, BeginReadingThread, (void *) this);
     if (rc) {
         printf("ERROR in FileHandler; return code from pthread_create() is % d\n", rc);
         exit(-1);
     }
+    if(rank==0){
+        rc = pthread_create(&write_thread, NULL, BeginWritingThread, (void *) this);
+        if (rc) {
+            printf("ERROR in FileHandler; return code from pthread_create() is % d\n", rc);
+            exit(-1);
+        }
     
-    rc = pthread_create(&write_thread, NULL, BeginWritingThread, (void *) this);
-    if (rc) {
-        printf("ERROR in FileHandler; return code from pthread_create() is % d\n", rc);
-        exit(-1);
     }
+    
+    return threadPair(read_thread, write_thread);
 }
 
 void FileHandler::startMPIreceiveThread() {
     
+    MPI_Datatype OutputPairtype;
+    char outputFileName[80];
+    MPI_Datatype type[2] = {MPI_INT, MPI_SHORT};
+    int blocklength[2] = {1, 1};
+    MPI_Aint disp[2] = {sizeof (int), sizeof (short)}; //vai dar merda
+    MPI_Type_struct(2, blocklength, disp, type, &OutputPairtype);
+    MPI_Type_commit(&OutputPairtype);
+    
+    vector< OutputPair > newOutputs;
+    for(int i=0; i< num_process-1 ;i++){
+    cout << "vai receber(rank="<<rank <<") :: "<< endl;
+    MPI_Recv(&x, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+    cout << "vai receber (do rank="<<rank <<") :: recebe do "<< status.MPI_SOURCE <<" :"<<x<< endl;
+    MPI_Recv(&newOutputs, x, OutputPairtype, 1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+    cout << "vai receber 2 (rank="<<rank <<") :: "<< x << endl;
+    
+    //inputHandler2[status.MPI_SOURCE]=newOutputs;
+    inputHandler[status.MPI_TAG]->output[status.MPI_SOURCE] = newOutputs;
+    num_ficheiro[status.MPI_TAG]++;
+    
+    cout << "num_ficheiro :::::"<< num_ficheiro[status.MPI_TAG] << endl;
+    if(num_ficheiro[status.MPI_TAG]>num_process){
+        
+        cout<< "----------- IMPRIME ----------- "<< rank << endl;
+        sprintf(outputFileName, OUPUT_STRING, status.MPI_TAG);
+        sprintf(outputFileName, OUPUT_STRING, status.MPI_TAG);
+
+
+        // Condition verified - begin output print
+        manageOutputOf(status.MPI_TAG, outputFileName);
+
+        // Cleaup resources used
+//        pthread_mutex_destroy(&loadedFile->mutex);
+//        pthread_cond_destroy(&loadedFile->finished_cond);
+//
+//        delete loadedFile->workVector;
+//        delete loadedFile->memoryBlock;
+        
+        //ver estes ultimos
+        delete inputHandler[status.MPI_TAG];
+
+        inputHandler[status.MPI_TAG] = NULL;
+        
+    }
+    }
+    
+    cout << " ACABOU RECEBER:::::" << endl;
+    
+    
 }
 
 void FileHandler::startFileHandlerThread() {
-    
+
     int files_read = 0;
     int files_processed = 0;
     char inputFileName[80];
     char outputFileName[80];
     LoadedFile* loadedFile;
-    
+
     do {
-        
-        if( files_read - files_processed > 1 ) {
-            
+
+        if (files_read - files_processed > 1) {
+
             loadedFile = inputHandler[files_processed];
-            
+
             // Check to see if all threads have finished processing this input file
             LOCK(loadedFile->mutex);
             COND_WAIT(!loadedFile->finished_work, loadedFile->finished_cond, loadedFile->mutex)
             UNLOCK(loadedFile->mutex);
             
-            sprintf(outputFileName, OUPUT_STRING, files_processed);
             
-            // Condition verified - begin output print
-            manageOutputOf( files_processed, outputFileName);
-            
-            // Cleaup resources used
-            pthread_mutex_destroy(&loadedFile->mutex);
-            pthread_cond_destroy(&loadedFile->finished_cond);
-            
-            delete loadedFile->workVector;
-            delete loadedFile->memoryBlock;
-            delete inputHandler[files_processed];
-            
-            inputHandler[files_processed] = NULL;
+            if(rank==0){
+                num_ficheiro[files_processed]++;
+                
+                sprintf(outputFileName, OUPUT_STRING, files_processed);
+                
+                manageOutputOf(status.MPI_TAG, outputFileName);
+                
+
+            }else{
+                cout<< "ENTRA PARA ENVIAR rank= "<< rank << endl;
+                
+                
+                
+                MPI_Datatype OutputPairtype;
+                MPI_Datatype type[2]= { MPI_INT, MPI_SHORT};
+                int blocklength[2]={1,1};
+                MPI_Aint disp[2]={sizeof(int),sizeof(short)};//vai dar merda
+                MPI_Type_struct(2,blocklength,disp,type,&OutputPairtype);
+                MPI_Type_commit(&OutputPairtype);
+                
+                
+                //x[0]=rank;
+                x=loadedFile->output[rank].size();
+                cout << "vai enviar(rank="<<rank <<") :: "<< x << endl;
+                MPI_Send(&x, 2, MPI_INT, 1, 2,MPI_COMM_WORLD);
+                cout << "vai enviar 2 (rank="<<rank <<") :: "<< x << endl;
+                MPI_Send(&loadedFile->output[rank],loadedFile->output[rank].size(),OutputPairtype,0,files_processed,MPI_COMM_WORLD);
+                
+                
+                pthread_mutex_destroy(&loadedFile->mutex);
+                pthread_cond_destroy(&loadedFile->finished_cond);
+
+                delete loadedFile->workVector;
+                delete loadedFile->memoryBlock;
+                delete inputHandler[files_processed];
+
+                inputHandler[files_processed] = NULL;
+                
+            }
             
             files_processed++;
+            
+            
         }
-        
+
         sprintf(inputFileName, INPUT_STRING, files_read);
-        
+
         readInputFile(inputFileName);
-        
+
         files_read++;
-        
+
         LOCK(available_mutex);
-        
+
         highest_available++;
         COND_SIGNAL(available_cond);
-        
+
         UNLOCK(available_mutex);
-        
-    }while(files_read < NUM_FILES);
+
+    } while (files_read < NUM_FILES);
 
     // All files have been read, process remaining files
     while (files_processed < files_read) {
@@ -153,25 +254,60 @@ void FileHandler::startFileHandlerThread() {
         COND_WAIT(!loadedFile->finished_work, loadedFile->finished_cond, loadedFile->mutex)
         UNLOCK(loadedFile->mutex);
 
-        sprintf(outputFileName, OUPUT_STRING, files_processed);
         
-        // Condition verified - begin output print
-        manageOutputOf(files_processed, outputFileName);
-
-        // Cleaup resources used
-        pthread_mutex_destroy(&loadedFile->mutex);
-        pthread_cond_destroy(&loadedFile->finished_cond);
-
-        delete loadedFile->workVector;
-        delete loadedFile->memoryBlock;
-        delete inputHandler[files_processed];
-
-        inputHandler[files_processed] = NULL;
+        if(rank==0){
+            
+          num_ficheiro[files_processed]++;
+          sprintf(outputFileName, OUPUT_STRING, files_processed);
+                
+                manageOutputOf(status.MPI_TAG, outputFileName);
+                
+//        cout<< "----------- IMPRIME ----------- "<< rank << endl;
+//        
+//        sprintf(outputFileName, OUPUT_STRING, files_processed);
+//
+//        // Condition verified - begin output print
+//        manageOutputOf(files_processed, outputFileName);
+//
+//        // Cleaup resources used
+//        pthread_mutex_destroy(&loadedFile->mutex);
+//        pthread_cond_destroy(&loadedFile->finished_cond);
+//
+//        delete loadedFile->workVector;
+//        delete loadedFile->memoryBlock;
+//        delete inputHandler[files_processed];
+//
+//        inputHandler[files_processed] = NULL;
+            
+            
+        
+        }else{
+                cout<< "ENTRA PARA ENVIAR rank= "<< rank << endl;
+                
+                //x=rank;
+                x=loadedFile->output[rank].size();
+                cout << "vai enviar(rank="<<rank <<") :: "<< x << endl;
+                MPI_Send(&x, 1, MPI_INT, 0, 2,MPI_COMM_WORLD);
+                cout << "vai enviar 2 (rank="<<rank <<") :: "<< x << endl;
+                
+                MPI_Datatype OutputPairtype;
+                MPI_Datatype type[2]= { MPI_INT, MPI_SHORT};
+                int blocklength[2]={1,1};
+                MPI_Aint disp[2]={sizeof(int),sizeof(short)};//vai dar merda
+                MPI_Type_struct(2,blocklength,disp,type,&OutputPairtype);
+                MPI_Type_commit(&OutputPairtype);
+                MPI_Send(&loadedFile->output[rank],loadedFile->output[rank].size(),OutputPairtype,0,files_processed,MPI_COMM_WORLD);
+                
+                
+                
+                
+            }
 
         files_processed++;
     }
     
-    pthread_exit(NULL);
+    cout << " acabou :S .......... "<<rank << endl;
+    
 }
 
 LoadedFile* FileHandler::getNextWorkFile(int file_id) {
@@ -183,10 +319,10 @@ LoadedFile* FileHandler::getNextWorkFile(int file_id) {
         COND_WAIT((file_id > highest_available), available_cond, available_mutex)
 
         UNLOCK(available_mutex);
-        
+
         return inputHandler[file_id];
     } else {
-        
+
         return NULL;
     }
 }
@@ -197,22 +333,24 @@ void FileHandler::freeRuleSpace() {
         delete ruleHandler->workVector;
 
         delete ruleHandler;
-        
+
         ruleHandler = NULL;
     }
 }
 
 unsigned long int FileHandler::getMemoryUsed() {
     vector<LoadedFile*>::iterator it = inputHandler.begin();
-    
+
     unsigned long int totalSize = 0;
 
-    while(it < inputHandler.end()) {
-        totalSize += (*it)->size * sizeof(cell_value);
-        totalSize += (*it)->workVector->size() * sizeof(cell_value*);
-        totalSize += sizeof(unsigned int);
+    while (it < inputHandler.end()) {
+        totalSize += (*it)->size * sizeof (cell_value);
+        totalSize += (*it)->workVector->size() * sizeof (cell_value*);
+        totalSize += sizeof (unsigned int);
 
-        totalSize += (*it)->output.size() * sizeof( pair<cell_array, cell_value> );
+        for(int i=0; i<num_process; i++){
+            totalSize += (*it)->output[i].size() * sizeof ( OutputPair );
+        }       
 
         it++;
     }
@@ -236,11 +374,13 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     char *map;
 
     int fileSize = 0;
-
-    fileSize = file->output.size();
-    printf("Found %d outputs\n", fileSize);
+    for (int i = 0; i < num_process; i++) {
+        fileSize += file->output[i].size();
     
-    cout << "contador::"<<fileSize << endl; 
+    }
+    printf("Found %d outputs\n", fileSize);
+
+    cout << "contador::" << fileSize << endl;
     fileSize *= RULE_SIZE * 6 * sizeof (char);
 
     fd = open(fileName, O_RDWR | O_CREAT, (mode_t) 0600);
@@ -249,8 +389,8 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
         perror("Error opening file for writing");
         exit(EXIT_FAILURE);
     }
-    if(fileSize==0)
-        fileSize=2;
+    if (fileSize == 0)
+        fileSize = 2;
 
     result = lseek(fd, fileSize - 1, SEEK_SET);
     if (result == -1) {
@@ -277,68 +417,70 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     int idx = 0;
     cell_array t_id;
     vector< OutputPair >::iterator it;
-    
+
     cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
-    
-    for (it = file->output.begin(); it < file->output.end(); it++) {
-        
-        t_id = (*file->workVector)[((*it).index)];
-        
-        //t_id = &((*it).first[0]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[1]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[2]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[3]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[4]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[5]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[6]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[7]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[8]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        //t_id &((*it).first[9]);
-        memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
-        idx += lookupSizes[*t_id];
-        map[idx++] = ',';
-        t_id++;
-        memcpy(&map[idx], lookupTable[(*it).rule], lookupSizes[(*it).rule]);
-        idx += lookupSizes[(*it).rule];
-        map[idx++] = '\n';
-        
+
+    for (int i = 0; i < num_process; i++) {
+        for (it = file->output[i].begin(); it < file->output[i].end(); it++) {
+
+            t_id = (*file->workVector)[((*it).index)];
+
+            //t_id = &((*it).first[0]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[1]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[2]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[3]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[4]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[5]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[6]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[7]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[8]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            //t_id &((*it).first[9]);
+            memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
+            idx += lookupSizes[*t_id];
+            map[idx++] = ',';
+            t_id++;
+            memcpy(&map[idx], lookupTable[(*it).rule], lookupSizes[(*it).rule]);
+            idx += lookupSizes[(*it).rule];
+            map[idx++] = '\n';
+
+        }
     }
 
     map[idx] = '\0';
@@ -351,15 +493,15 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
 cell_value FileHandler::c_nextToken(char delim) {
 
-    cell_value result=0;
+    cell_value result = 0;
     char* lptr = tokenPtr;
 
-    for(; *lptr != '\0'; lptr++) {
+    for (; *lptr != '\0'; lptr++) {
 
-        if(*lptr == delim) {
+        if (*lptr == delim) {
             *lptr = '\0';
             tokenPtr = ++lptr;
-            
+
             return result;
         }
 
@@ -367,11 +509,11 @@ cell_value FileHandler::c_nextToken(char delim) {
         result += *lptr - '0';
     }
 
-    if (result>0) {
+    if (result > 0) {
         tokenPtr = lptr;
         return result;
     }
-    
+
     return -1;
 }
 
@@ -391,25 +533,25 @@ LoadedFile* FileHandler::readFile(const char* FileName, int row_size, int vector
     status = fstat(fd, &buffer);
 
     if (fd == -1) {
-	perror("Error opening file for reading");
-	exit(EXIT_FAILURE);
+        perror("Error opening file for reading");
+        exit(EXIT_FAILURE);
     }
 
-    map = static_cast<char*>(mmap(NULL, buffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0));
+    map = static_cast<char*> (mmap(NULL, buffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0));
 
     if (map == MAP_FAILED) {
-	close(fd);
-	perror("Error mmapping the file");
-	exit(EXIT_FAILURE);
+        close(fd);
+        perror("Error mmapping the file");
+        exit(EXIT_FAILURE);
     }
-    
+
     tokenPtr = map;
     cell_value value = c_nextToken(',');
-    
+
     cell_array array = new cell_value[number_size];
     int ruleIndex = 0, ruleStart;
 
-    while (value>=0) {
+    while (value >= 0) {
         ruleStart = ruleIndex;
 
         array[ruleIndex++] = value;
@@ -422,10 +564,10 @@ LoadedFile* FileHandler::readFile(const char* FileName, int row_size, int vector
         array[ruleIndex++] = c_nextToken(',');
         array[ruleIndex++] = c_nextToken(',');
 
-        if(row_size == RULE_SIZE) {
+        if (row_size == RULE_SIZE) {
             array[ruleIndex++] = c_nextToken(',');
             array[ruleIndex++] = c_nextToken('\n');
-        }else {
+        } else {
             array[ruleIndex++] = c_nextToken('\n');
         }
 
@@ -435,20 +577,21 @@ LoadedFile* FileHandler::readFile(const char* FileName, int row_size, int vector
     }
 
     close(fd);
-    munmap(map, sizeof(map));
+    munmap(map, sizeof (map));
 
-    LoadedFile *newFile  = new LoadedFile;
+    LoadedFile *newFile = new LoadedFile;
 
-    newFile->size        = number_size;
+    newFile->size = number_size;
     newFile->memoryBlock = array;
-    newFile->workVector  = rules;
+    newFile->workVector = rules;
+    newFile->output = new outputVector[num_process];
 
-    cout << "\nRead took: " << (((double)clock() - s) / CLOCKS_PER_SEC) << endl;
+    cout << "\nRead took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 
     return newFile;
 }
 
-LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vector_size, int number_size,int start, int end) {
+LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vector_size, int number_size, int start, int end) {
 
     clock_t s = clock();
 
@@ -461,40 +604,41 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
     int status;
     cout << "file name: " << FileName << endl;
     fd = open(FileName, O_RDONLY);
-        
+
 
     status = fstat(fd, &buffer);
-    
+
 
     if (fd == -1) {
-	perror("Error opening file for reading ......");
-	exit(EXIT_FAILURE);
+        perror("Error opening file for reading ......");
+        exit(EXIT_FAILURE);
     }
 
-    map = static_cast<char*>(mmap(NULL, buffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0));
+    map = static_cast<char*> (mmap(NULL, buffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0));
 
     if (map == MAP_FAILED) {
-	close(fd);
-	perror("Error mmapping the file");
-	exit(EXIT_FAILURE);
+        close(fd);
+        perror("Error mmapping the file");
+        exit(EXIT_FAILURE);
     }
-    
+
     tokenPtr = map;
     cell_value value;
-    
+
     cell_array array = new cell_value[number_size];
     int ruleIndex = 0, ruleStart;
 
-    while(ruleIndex < start){
-            
-           array[ruleIndex++] = c_nextToken('\n'); 
-        }
+    while (ruleIndex < start) {
+
+        array[ruleIndex++] = c_nextToken('\n');
+    }
+
     value = c_nextToken(',');
-    ruleIndex=0;
-    int k=0;
-    while (k<end) {
-        
-        
+    ruleIndex = 0;
+    int k = 0;
+    while (k < end) {
+
+
         ruleStart = ruleIndex;
 
         array[ruleIndex++] = value;
@@ -507,10 +651,10 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
         array[ruleIndex++] = c_nextToken(',');
         array[ruleIndex++] = c_nextToken(',');
 
-        if(row_size == RULE_SIZE) {
+        if (row_size == RULE_SIZE) {
             array[ruleIndex++] = c_nextToken(',');
             array[ruleIndex++] = c_nextToken('\n');
-        }else {
+        } else {
             array[ruleIndex++] = c_nextToken('\n');
         }
 
@@ -521,15 +665,16 @@ LoadedFile* FileHandler::readFileMPI(const char* FileName, int row_size, int vec
     }
     cout << "k:::: " << k << endl;
     close(fd);
-    munmap(map, sizeof(map));
+    munmap(map, sizeof (map));
 
-    LoadedFile *newFile  = new LoadedFile;
+    LoadedFile *newFile = new LoadedFile;
 
-    newFile->size        = number_size;
+    newFile->size = number_size;
     newFile->memoryBlock = array;
-    newFile->workVector  = rules;
-
-    cout << "\nRead took (MPI): " << (((double)clock() - s) / CLOCKS_PER_SEC) << endl;
+    newFile->workVector = rules;
+    newFile->output = new outputVector[num_process];
+    
+    cout << "\nRead took (MPI): " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 
     return newFile;
 }
@@ -543,11 +688,13 @@ FileHandler::~FileHandler() {
             pthread_mutex_destroy(&((*it)->mutex));
             pthread_cond_destroy(&((*it)->finished_cond));
 
+            delete (*it)->output;
+            
             delete (*it)->memoryBlock;
             delete (*it)->workVector;
             delete (*it);
         }
-        
+
         it++;
     }
 
