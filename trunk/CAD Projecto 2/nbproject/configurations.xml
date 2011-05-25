@@ -42,6 +42,11 @@
           <warningLevel>2</warningLevel>
         </ccTool>
       </compileType>
+      <item path="FileHandler.cpp" ex="false" tool="1" flavor="0">
+        <ccTool>
+          <commandlineTool>g++</commandlineTool>
+        </ccTool>
+      </item>
       <item path="main.cpp" ex="false" tool="1" flavor="0">
         <ccTool>
           <commandlineTool>g++</commandlineTool>
