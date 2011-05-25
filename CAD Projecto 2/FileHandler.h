@@ -59,6 +59,8 @@ public:
     FileHandler(const FileHandler& orig);
     virtual ~FileHandler();
 
+    void init(int rank, int num_process, MPI_Status status);
+    
     cell_vector* readRuleFile(const char* FileName);
     cell_vector* readRuleFileMPI(const char* FileName, int start, int end);
     cell_vector* readInputFile(const char* FileName);
@@ -74,11 +76,6 @@ public:
 
     unsigned long int getMemoryUsed();
     
-    void setRank(int rank);
-    
-    void setNumProcess(int num_process);
-    void setStat(MPI_Status status);
-    
     void freeRuleSpace();
 
 private:
@@ -89,10 +86,6 @@ private:
     int highest_available;
     
     /* Atributes */
-    
-   
-    int x;
-    
 
     int rank;
     int num_process;
@@ -105,9 +98,6 @@ private:
 
     LoadedFile* ruleHandler;
     vector<LoadedFile*> inputHandler;
-    
-    //vector <vector <int> > seila;
-    
     
     pthread_t read_thread;
     pthread_t write_thread;

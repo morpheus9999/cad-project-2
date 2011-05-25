@@ -97,8 +97,6 @@ int main(int argc, char** argv) {
     time_t end_time= 0;
     cout<< "MPI" << endl;
     
-    
-    
 #ifdef MPI
     
     MPI_Status status;
@@ -118,18 +116,16 @@ int main(int argc, char** argv) {
     MPI_Get_processor_name(processor_name, &namelen);
     
     //numprocs=1;
-    cout <<"NUM processes:" <<numprocs << endl;
-    cout <<"NUM rank:" <<rank << endl;
+    cout << "NUM processes:" << numprocs << endl;
+    cout << "NUM rank:" << rank << endl;
     cout << "NOME DO PC:::" << processor_name << endl;
-    fileHandler.setRank(rank);
-    fileHandler.setStat(status);
-    fileHandler.setNumProcess(numprocs);
-    
 
-        cout  << rank*RULE_NUM << " " << RULE_NUM/numprocs << " " << endl;
-        ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
-        ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv",rank*RULE_NUM,RULE_NUM/numprocs);
-        
+    fileHandler.init(rank, numprocs, status);
+
+    cout << rank * RULE_NUM << " " << RULE_NUM / numprocs << " " << endl;
+    ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
+    ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv", rank*RULE_NUM, RULE_NUM / numprocs);
+    
 #else
     
     //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
