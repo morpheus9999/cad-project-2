@@ -29,6 +29,11 @@ struct OutputPair {
     int index;
     short rule;
     
+    OutputPair() {
+        index = 0;
+        rule = -9999;
+    }
+    
     OutputPair(int n_index, short n_rule) {
         index = n_index;
         rule = n_rule;
@@ -48,6 +53,7 @@ struct LoadedFile {
     bool finished_work;
     bool loaded;
     
+    int* outputSizes;
     outputVector* output;
     
     void finished() {

@@ -95,6 +95,7 @@ void FileHandler::init(int rank, int num_process, MPI_Status status) {
     file_pointer* ptr = inputHandler;
     for(int i=0; i<NUM_FILES; i++, ptr++) {
         (*ptr) = new LoadedFile;
+        (*ptr)->outputSizes = new int[num_process];
         (*ptr)->output = new outputVector[num_process];
         (*ptr)->loaded = false;
     }
@@ -128,7 +129,7 @@ void FileHandler::startMPIreceiveThread() {
     char outputFileName[80];
     MPI_Datatype type[2] = {MPI_INT, MPI_SHORT};
     int blocklength[2] = {1, 1};
-    MPI_Aint disp[2] = {sizeof (int), sizeof (short)}; //vai dar merda
+    MPI_Aint disp[2] = {0, sizeof (int)}; //PODE NAO FUNKAR
     MPI_Type_struct(2, blocklength, disp, type, &OutputPairtype);
     MPI_Type_commit(&OutputPairtype);
     
@@ -150,14 +151,20 @@ void FileHandler::startMPIreceiveThread() {
                 outputPointer = &(currentFile->output[status.MPI_SOURCE]);
                 ASSERT(outputPointer!=NULL);
                 outputPointer->reserve(numberOfOutputs);
-
+                
+                currentFile->outputSizes[status.MPI_SOURCE] = numberOfOutputs;
+                
                 // Next instruct MPI_Recv to wait for a message from the same sender & tag with
                 //the new outputs and directly copy them to the assigned structure
                 cout << "vai receber (do rank=" << rank << ") :: recebe do " << status.MPI_SOURCE << " :" << numberOfOutputs << endl;
-                MPI_Recv(outputPointer, numberOfOutputs, OutputPairtype,
+                
+                MPI_Recv(&(*outputPointer)[0], numberOfOutputs, OutputPairtype,
                         status.MPI_SOURCE, currentFileId, MPI_COMM_WORLD, &status);
-                cout << "vai receber 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
-
+                
+                printf("recebeu indice %d, regra %d\n", (*outputPointer)[0].index, (*outputPointer)[0].rule);
+                printf("recebeu indice %d, regra %d\n", (*outputPointer)[1].index, (*outputPointer)[1].rule);
+                //outputPointer->assign(outputPointer, outputPointer + numberOfOutputs);
+                //delete receive_buffer;
             }
             
             // Not sure why this is relevant...
@@ -181,6 +188,8 @@ void FileHandler::startMPIreceiveThread() {
             COND_WAIT(!currentFile->finished_work, currentFile->finished_cond, currentFile->mutex)
             UNLOCK(currentFile->mutex);
 
+            currentFile->outputSizes[rank] = currentFile->output[rank].size();
+            
             // Condition verified - begin output print
             manageOutputOf(currentFileId, outputFileName);
 
@@ -228,7 +237,7 @@ void FileHandler::startReadingThread() {
                 MPI_Datatype OutputPairtype;
                 MPI_Datatype type[2]= { MPI_INT, MPI_SHORT};
                 int blocklength[2]={1,1};
-                MPI_Aint disp[2]={sizeof(int),sizeof(short)};//vai dar merda
+                MPI_Aint disp[2]={0,sizeof(int)};//vai dar merda
                 MPI_Type_struct(2,blocklength,disp,type,&OutputPairtype);
                 MPI_Type_commit(&OutputPairtype);
                 
@@ -253,6 +262,9 @@ void FileHandler::startReadingThread() {
 
                 loadedFile = NULL;
                 
+            }else{
+                numberOfOutputs = loadedFile->output[rank].size();
+                cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
             }
             
             files_processed++;
@@ -289,7 +301,7 @@ void FileHandler::startReadingThread() {
             MPI_Datatype OutputPairtype;
             MPI_Datatype type[2] = {MPI_INT, MPI_SHORT};
             int blocklength[2] = {1, 1};
-            MPI_Aint disp[2] = {sizeof (int), sizeof (short)}; //vai dar merda
+            MPI_Aint disp[2] = {0, sizeof (int)};
             MPI_Type_struct(2, blocklength, disp, type, &OutputPairtype);
             MPI_Type_commit(&OutputPairtype);
 
@@ -301,7 +313,8 @@ void FileHandler::startReadingThread() {
             if (numberOfOutputs > 0) {
                 // And a second with the elements themselves
                 cout << "vai enviar 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
-                MPI_Send(&(loadedFile->output[rank]), loadedFile->output[rank].size(),
+                
+                MPI_Send(&(loadedFile->output[rank])[0], loadedFile->output[rank].size(),
                         OutputPairtype, WRITE_RANK, files_processed, MPI_COMM_WORLD);
             }
             // Finally cleanup resources used by this file
@@ -314,7 +327,10 @@ void FileHandler::startReadingThread() {
 
             loadedFile = NULL;
 
-        }
+        }else{
+                numberOfOutputs = loadedFile->output[rank].size();
+                cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
+            }
 
         files_processed++;
     }
@@ -362,7 +378,7 @@ unsigned long int FileHandler::getMemoryUsed() {
             totalSize += sizeof (unsigned int);
 
             for (int i = 0; i < num_process; i++) {
-                totalSize += (*file_iterator)->output[i].size() * sizeof ( OutputPair);
+                totalSize += (*file_iterator)->outputSizes[i] * sizeof ( OutputPair );
             }
 
             file_iterator++;
@@ -389,7 +405,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
     int fileSize = 0;
     for (int i = 0; i < num_process; i++) {
-        fileSize += file->output[i].size();
+        fileSize += file->outputSizes[i];
     
     }
     printf("Found %d outputs\n", fileSize);
@@ -430,15 +446,20 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
     int idx = 0;
     cell_array t_id;
-    vector< OutputPair >::iterator it;
 
     cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
-
+    
+    int j;
+    outputVector* it;
+    
     for (int i = 0; i < num_process; i++) {
-        for (it = file->output[i].begin(); it < file->output[i].end(); it++) {
-
-            t_id = (*file->workVector)[((*it).index)];
+        
+        it = &(file->output[i]);
+        
+        for (j=0; j < file->outputSizes[i]; j++) {
+            
+            t_id = (*file->workVector)[(*it)[j].index];
 
             //t_id = &((*it).first[0]);
             memcpy(&map[idx], lookupTable[*t_id], lookupSizes[*t_id]);
@@ -490,8 +511,8 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
             idx += lookupSizes[*t_id];
             map[idx++] = ',';
             t_id++;
-            memcpy(&map[idx], lookupTable[(*it).rule], lookupSizes[(*it).rule]);
-            idx += lookupSizes[(*it).rule];
+            memcpy(&map[idx], lookupTable[(*it)[j].rule], lookupSizes[(*it)[j].rule]);
+            idx += lookupSizes[(*it)[j].rule];
             map[idx++] = '\n';
 
         }

@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
     cout << rank * RULE_NUM << " " << RULE_NUM / numprocs << " " << endl;
     ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/
     int numRulesPerClient = RULE_NUM / numprocs;
-    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv", rank*numRulesPerClient, numRulesPerClient);
+    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv", rank*numRulesPerClient, numRulesPerClient);
     
 #else
     
