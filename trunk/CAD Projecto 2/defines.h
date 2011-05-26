@@ -16,7 +16,7 @@
 
 #define DEBUG
 
-#define WRITE_RANK  1
+#define WRITE_RANK  0
 
 #define RULE_SIZE   11
 #define INPUT_SIZE  10
