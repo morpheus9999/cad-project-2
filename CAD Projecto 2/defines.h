@@ -14,6 +14,10 @@
 #include <map>
 #include <mpi.h>
 
+#define DEBUG
+
+#define WRITE_RANK  1
+
 #define RULE_SIZE   11
 #define INPUT_SIZE  10
 
@@ -51,6 +55,18 @@
 while ( cond ) {   \
    pthread_cond_wait(&(cond_mutex), &(mutex));   \
 }
+
+#ifndef DEBUG
+#define ASSERT(x)
+#else
+#define ASSERT(x) \
+        if (! (x)) \
+        { \
+                cout << "\nERROR!! Assert " << #x << " failed\n"; \
+                cout << " on line " << __LINE__  << "\n"; \
+                cout << " in file " << __FILE__ << "\n\n";  \
+        }
+#endif
 
 using namespace std;
 

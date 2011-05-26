@@ -19,6 +19,11 @@
 
 using namespace std;
 
+typedef fileHandler::FileHandler FileHandler;
+typedef fileHandler::LoadedFile LoadedFile;
+typedef fileHandler::OutputPair OutputPair;
+typedef fileHandler::file_pointer file_pointer;
+
 /* 
  * 
  * STRUCTS
@@ -78,7 +83,7 @@ StateCompare compareObj;
 
 cell_vector* inputSet;
 
-FileHandler fileHandler;
+FileHandler m_fileHandler;
 StateNode finalState[NUM_CLASS];
 vector<StateNode*> startIndex[INPUT_SIZE];
 
@@ -91,11 +96,11 @@ ContainFirst mappedIndexes[INPUT_SIZE][NUM_RANGE];
  */
 
 int main(int argc, char** argv) {
+    
     //264345972
     cell_vector* ruleSet;
     time_t start_time= 0;
     time_t end_time= 0;
-    cout<< "MPI" << endl;
     
 #ifdef MPI
     
@@ -120,34 +125,35 @@ int main(int argc, char** argv) {
     cout << "NUM rank:" << rank << endl;
     cout << "NOME DO PC:::" << processor_name << endl;
 
-    fileHandler.init(rank, numprocs, status);
+    m_fileHandler.init(rank, numprocs, status);
 
     cout << rank * RULE_NUM << " " << RULE_NUM / numprocs << " " << endl;
-    ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/         
-    ruleSet = fileHandler.readRuleFileMPI("dataset/THE_PROBLEM/rules2M.csv", rank*RULE_NUM, RULE_NUM / numprocs);
+    ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/
+    int numRulesPerClient = RULE_NUM / numprocs;
+    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv", rank*numRulesPerClient, numRulesPerClient);
     
 #else
     
-    //    ruleSet = fileHandler.readRuleFile("dataset/sm_rules.csv");
-    ruleSet = fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
-    //    ruleSet = fileHandler.readRuleFile("dataset/xs_rules.csv");
+    //    ruleSet = m_fileHandler.readRuleFile("dataset/sm_rules.csv");
+    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    //    ruleSet = m_fileHandler.readRuleFile("dataset/xs_rules.csv");
     
 #endif
     
-    threadPair tp = fileHandler.start();
-    
-//    inputSet = fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
-    //        inputSet = fileHandler.readInputFile("dataset/sm_input.csv");
-    //    inputSet = fileHandler.readInputFile("dataset/xs_input.csv");
+//    inputSet = m_fileHandler.readInputFile("dataset/THE_PROBLEM/trans_day_1.csv");
+    //        inputSet = m_fileHandler.readInputFile("dataset/sm_input.csv");
+    //    inputSet = m_fileHandler.readInputFile("dataset/xs_input.csv");
     //cout << "entra" << endl;
     start_time=time(NULL);
     buildStateMachine(ruleSet);
     end_time =time(NULL);
-    cout << "Tempo makina estados::  "<< end_time-start_time << endl;
+    printf("[%d] Tempo makina estados::  %lu\n", rank, end_time-start_time);
     //cout << "Printing tree\n";
     //printSM(root, 0);
     
    // return 0;
+    
+    m_fileHandler.start();
     
     thread_work(rank);
     
@@ -155,16 +161,16 @@ int main(int argc, char** argv) {
   
 #ifdef MPI
     
-    if(rank==0){
-        pthread_join(tp.first,NULL);
-        pthread_join(tp.second,NULL);
+    if(rank==WRITE_RANK){
+        pthread_join( m_fileHandler.getThreadObject(fileHandler::READ_THREAD), NULL);
+        pthread_join( m_fileHandler.getThreadObject(fileHandler::WRITE_THREAD), NULL);
         
         
         wtime = MPI_Wtime() - wtime;
         cout << "TEMPO::: " << wtime << endl; 
         
     }else{
-        pthread_join(tp.first,NULL);
+        pthread_join( m_fileHandler.getThreadObject(fileHandler::READ_THREAD), NULL);
     }
     cout << "::::ACABA:::: " <<rank  << endl;
     
@@ -186,7 +192,7 @@ void thread_work(int rank) {
     
     
     
-    LoadedFile* currentWorkFile = fileHandler.getNextWorkFile(fileId);
+    file_pointer currentWorkFile = m_fileHandler.getNextWorkFile(fileId);
     cell_vector::iterator input_it;
 
     LevelMap::iterator depth_iterator;
@@ -223,7 +229,7 @@ void thread_work(int rank) {
 
                     if (depth_iterator->first == i) {
                         // If, for this rule there are no more distinct values required,
-                        //signal the fileHandler thread of a new matching pair (input, rule)
+                        //signal the m_fileHandler thread of a new matching pair (input, rule)
                         for (stateMachine_iterator = depth_iterator->second.begin()
                                 ; stateMachine_iterator < depth_iterator->second.end()
                                 ; stateMachine_iterator++) {
@@ -281,7 +287,7 @@ void thread_work(int rank) {
         
         currentWorkFile->finished();
 
-        currentWorkFile = fileHandler.getNextWorkFile(fileId);
+        currentWorkFile = m_fileHandler.getNextWorkFile(fileId);
 
     } while (currentWorkFile != NULL);
 
@@ -426,7 +432,7 @@ void buildStateMachine(cell_vector* ruleSet) {
     }
     
     // Release space reserved by file handler for rules
-    fileHandler.freeRuleSpace();
+    m_fileHandler.freeRuleSpace();
 
     cout << "\nState machine build took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 }
