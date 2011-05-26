@@ -15,6 +15,16 @@
 
 //typedef pair<int, cell_value> OutputPair;
 
+void* BeginReadingThread(void* p);
+void* BeginWritingThread(void* p);
+
+namespace fileHandler {
+
+enum {
+    WRITE_THREAD = 1,
+    READ_THREAD = 0
+};
+
 struct OutputPair {
     int index;
     short rule;
@@ -36,6 +46,7 @@ struct LoadedFile {
     pthread_cond_t  finished_cond;
     
     bool finished_work;
+    bool loaded;
     
     outputVector* output;
     
@@ -50,8 +61,7 @@ struct LoadedFile {
     }
 };
 
-void* BeginReadingThread(void* p);
-void* BeginWritingThread(void* p);
+typedef LoadedFile* file_pointer;
 
 class FileHandler {
 public:
@@ -61,16 +71,15 @@ public:
 
     void init(int rank, int num_process, MPI_Status status);
     
-    cell_vector* readRuleFile(const char* FileName);
-    cell_vector* readRuleFileMPI(const char* FileName, int start, int end);
-    cell_vector* readInputFile(const char* FileName);
+    cell_vector* readRuleFile(const char* FileName, int start=0, int size=RULE_NUM);
+    cell_vector* readInputFile(const char* FileName, int id);
     
-    threadPair start();
+    void start();
     
-    void startFileHandlerThread();
+    void startReadingThread();
     void startMPIreceiveThread();
     
-    LoadedFile* getNextWorkFile(int file_id);
+    file_pointer getNextWorkFile(int file_id);
     
     void manageOutputOf(int file_id, const char* fileName);
 
@@ -78,11 +87,13 @@ public:
     
     void freeRuleSpace();
 
+    pthread_t getThreadObject(int objId);
+    
 private:
     cell_value c_nextToken(char delim);
     
-    LoadedFile* readFile(const char* FileName, int row_size, int vector_size, int number_size);
-    LoadedFile* readFileMPI(const char* FileName, int row_size, int vector_size, int number_size,int start,int end);
+    file_pointer readFile(const char* FileName, int row_size, int vector_size, file_pointer file, int start);
+    
     int highest_available;
     
     /* Atributes */
@@ -96,8 +107,8 @@ private:
     char        lookupTable[NUM_RANGE+1][7];
     cell_value  lookupSizes[NUM_RANGE+1];
 
-    LoadedFile* ruleHandler;
-    vector<LoadedFile*> inputHandler;
+    file_pointer ruleHandler;
+    file_pointer inputHandler[NUM_FILES];
     
     pthread_t read_thread;
     pthread_t write_thread;
@@ -109,6 +120,8 @@ private:
     pthread_mutex_t finished_mutex;
     
 };
+
+} //namespace fileHandler
 
 #endif	/* FILEHANDLER_H */
 
