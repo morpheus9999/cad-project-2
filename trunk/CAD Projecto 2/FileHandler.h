@@ -115,7 +115,7 @@ private:
 
     file_pointer ruleHandler;
     file_pointer inputHandler[NUM_FILES];
-    
+    //LoadedFile* m;
     pthread_t read_thread;
     pthread_t write_thread;
     
