@@ -121,21 +121,21 @@ int main(int argc, char** argv) {
     MPI_Get_processor_name(processor_name, &namelen);
     
     //numprocs=1;
-    cout << "NUM processes:" << numprocs << endl;
-    cout << "NUM rank:" << rank << endl;
-    cout << "NOME DO PC:::" << processor_name << endl;
+    //cout << "NUM processes:" << numprocs << endl;
+    //cout << "NUM rank:" << rank << endl;
+    //cout << "NOME DO PC:::" << processor_name << endl;
 
     m_fileHandler.init(rank, numprocs, status);
 
-    cout << rank * RULE_NUM << " " << RULE_NUM / numprocs << " " << endl;
-    ///Users/jojo/Documents/DEI/CAD/CAD2/trunk/CAD Projecto 2/
     int numRulesPerClient = RULE_NUM / numprocs;
-    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv", rank*numRulesPerClient, numRulesPerClient);
+    int resto =RULE_NUM % numprocs;
+    
+    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv", rank*numRulesPerClient, numRulesPerClient+((rank==(numprocs-1)) ? resto : 0));    
     
 #else
     
     //    ruleSet = m_fileHandler.readRuleFile("dataset/sm_rules.csv");
-    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M.csv");
+    ruleSet = m_fileHandler.readRuleFile("dataset/THE_PROBLEM/rules2M_sorted.csv");
     //    ruleSet = m_fileHandler.readRuleFile("dataset/xs_rules.csv");
     
 #endif
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
     start_time=time(NULL);
     buildStateMachine(ruleSet);
     end_time =time(NULL);
-    printf("[%d] Tempo makina estados::  %lu\n", rank, end_time-start_time);
+    //printf("[%d] Tempo makina estados::  %lu\n", rank, end_time-start_time);
     //cout << "Printing tree\n";
     //printSM(root, 0);
     
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
     }else{
         pthread_join( m_fileHandler.getThreadObject(fileHandler::READ_THREAD), NULL);
     }
-    cout << "::::ACABA:::: " <<rank  << endl;
+    //cout << "::::ACABA:::: " <<rank  << endl;
     
     MPI_Finalize();
     
@@ -203,7 +203,7 @@ void thread_work(int rank) {
     StateNode *state;
     ContainFirst *first_state;
     
-    clock_t s = clock();
+    //clock_t s = clock();
     
     int input_index=0;
     
@@ -291,7 +291,7 @@ void thread_work(int rank) {
 
     } while (currentWorkFile != NULL);
 
-    cout << "\nExecution took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
+    //cout << "\nExecution took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
     
     
 }
@@ -300,7 +300,7 @@ void buildStateMachine(cell_vector* ruleSet) {
 
     cell_vector::iterator rule_it = ruleSet->begin();
 
-    clock_t s = clock();
+    //clock_t s = clock();
 
     StateNode *ptr;
     
@@ -314,9 +314,8 @@ void buildStateMachine(cell_vector* ruleSet) {
     int state_free = MAX_STATE_CACHE_SIZE;
     StateNode* state_cache = new StateNode[MAX_STATE_CACHE_SIZE];
     
-    Depth         cache_depth;
-    cell_value    cache_value;
-    ContainFirst* cache_firstState;
+    Depth         cache_depth = -1;
+    ContainFirst* cache_firstState = NULL;
     
     Depth depth;
     
@@ -361,18 +360,14 @@ void buildStateMachine(cell_vector* ruleSet) {
                     }
 
                 } else {
-                    
-                    if (cache_value != currentValue || cache_depth != i) {
+                    cache_depth = i;
                         
-                        cache_depth = i;
-                        cache_value = currentValue;
-                        cache_firstState = &(mappedIndexes[i][currentValue]);
+                    cache_firstState = &(mappedIndexes[i][currentValue]);
                         
-                        if(cache_firstState->next == NULL) {
-                            cache_firstState->next = new LevelMap();
-                        }
-                        
+                    if(cache_firstState->next == NULL) {
+                        cache_firstState->next = new LevelMap();
                     }
+                    
                 }
             }
         }
@@ -414,7 +409,7 @@ void buildStateMachine(cell_vector* ruleSet) {
     
     
     
-    cout << "contador dentro state::"<<contador << endl; 
+    //cout << "contador dentro state::"<<contador << endl; 
     //    for (int i = 0; i < INPUT_SIZE; i++)
     //        cout << countIdx[i] << " ";
     //
@@ -434,5 +429,5 @@ void buildStateMachine(cell_vector* ruleSet) {
     // Release space reserved by file handler for rules
     m_fileHandler.freeRuleSpace();
 
-    cout << "\nState machine build took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
+    //cout << "\nState machine build took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 }

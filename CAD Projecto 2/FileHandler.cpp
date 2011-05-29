@@ -104,7 +104,7 @@ void FileHandler::init(int rank, int num_process, MPI_Status status) {
 
 void FileHandler::start() {
     
-    cout << "RANK :::::" << rank << endl;
+    //cout << "RANK :::::" << rank << endl;
     
     int rc = pthread_create(&read_thread, NULL, BeginReadingThread, (void *) this);
     if (rc) {
@@ -136,16 +136,19 @@ void FileHandler::startMPIreceiveThread() {
     int numberOfOutputs;
     outputVector* outputPointer;
     file_pointer currentFile;
+    //OutputPair k;
+    
+    //cout << "ENTRA Thread receber!!!!" << endl;
     
     for (int currentFileId = 0; currentFileId < NUM_FILES; currentFileId++) {
         
         currentFile = inputHandler[currentFileId];
-        
+        //cout << "ENTRA Thread receber3!!!!" << endl;
         for (int i = 0; i < num_process - 1; i++) {
             // First receive the number of outputs generated from sender
-            cout << "vai receber(rank=" << rank << ") :: " << endl;
+            //cout << "vai receber(rank=" << rank << ") :: " << endl;
             MPI_Recv(&numberOfOutputs, 1, MPI_INT, MPI_ANY_SOURCE, currentFileId, MPI_COMM_WORLD, &status);
-            printf("-- received from rank %d, %d outputs\n", status.MPI_SOURCE, numberOfOutputs);
+           // printf("-- received from rank %d, %d outputs\n", status.MPI_SOURCE, numberOfOutputs);
             if (numberOfOutputs > 0) {
                 // Then reserve memory to contain the new values in the appropriate structure
                 outputPointer = &(currentFile->output[status.MPI_SOURCE]);
@@ -156,28 +159,25 @@ void FileHandler::startMPIreceiveThread() {
                 
                 // Next instruct MPI_Recv to wait for a message from the same sender & tag with
                 //the new outputs and directly copy them to the assigned structure
-                cout << "vai receber (do rank=" << rank << ") :: recebe do " << status.MPI_SOURCE << " :" << numberOfOutputs << endl;
+               // cout << "vai receber (do rank=" << rank << ") :: recebe do " << status.MPI_SOURCE << " :" << numberOfOutputs << endl;
                 
                 MPI_Recv(&(*outputPointer)[0], numberOfOutputs, OutputPairtype,
                         status.MPI_SOURCE, currentFileId, MPI_COMM_WORLD, &status);
                 
-                printf("recebeu indice %d, regra %d\n", (*outputPointer)[0].index, (*outputPointer)[0].rule);
-                printf("recebeu indice %d, regra %d\n", (*outputPointer)[1].index, (*outputPointer)[1].rule);
-                //outputPointer->assign(outputPointer, outputPointer + numberOfOutputs);
-                //delete receive_buffer;
+                //printf("recebeu indice %d, regra %d\n", (*outputPointer)[0].index, (*outputPointer)[0].rule);
+                //printf("recebeu indice %d, regra %d\n", (*outputPointer)[1].index, (*outputPointer)[1].rule);
+                
             }
             
-            // Not sure why this is relevant...
-            //num_ficheiro[currentFileId]++;
 
-            cout << "num_ficheiro :::::" << num_ficheiro[currentFileId] << endl;
+            //cout << "num_ficheiro :::::" << num_ficheiro[currentFileId] << endl;
         }
         
         // All outputs from other clients have been received so we begin the final wrap up
         // Again, not sure why the condition is relevant...
         //if (num_ficheiro[currentFileId] > num_process) {
 
-            cout << "----------- IMPRIME ----------- " << rank << endl;
+            //cout << "----------- IMPRIME ----------- " << rank << endl;
             sprintf(outputFileName, OUPUT_STRING, currentFileId);
 
             // Check if this client has finished processing the file
@@ -204,7 +204,7 @@ void FileHandler::startMPIreceiveThread() {
             currentFile = NULL;
         //}
 
-        cout << " ACABOU RECEBER:::::" << endl;
+        //cout << " ACABOU RECEBER:::::" << endl;
     }
 }
 
@@ -232,23 +232,23 @@ void FileHandler::startReadingThread() {
             
             if(rank!=WRITE_RANK)
             {
-                cout<< "ENTRA PARA ENVIAR rank= "<< rank << endl;
+                //cout<< "ENTRA PARA ENVIAR rank= "<< rank << endl;
                 
                 MPI_Datatype OutputPairtype;
                 MPI_Datatype type[2]= { MPI_INT, MPI_SHORT};
                 int blocklength[2]={1,1};
-                MPI_Aint disp[2]={0,sizeof(int)};//vai dar merda
+                MPI_Aint disp[2]={0,sizeof (int)};//vai dar merda
                 MPI_Type_struct(2,blocklength,disp,type,&OutputPairtype);
                 MPI_Type_commit(&OutputPairtype);
                 
                 // Send a first message containing the number of elements
                 numberOfOutputs = loadedFile->output[rank].size();
-                cout << "vai enviar(rank="<<rank <<") :: "<< numberOfOutputs << endl;
+                //cout << "vai enviar(rank="<<rank <<") :: "<< numberOfOutputs << endl;
                 MPI_Send(&numberOfOutputs, 1, MPI_INT, WRITE_RANK, files_processed,MPI_COMM_WORLD);
 
                 if (numberOfOutputs > 0) {
                     // And a second with the elements themselves
-                    cout << "vai enviar 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
+                   // cout << "vai enviar 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
                     MPI_Send(&(loadedFile->output[rank]), loadedFile->output[rank].size(),
                             OutputPairtype, WRITE_RANK, files_processed, MPI_COMM_WORLD);
                 }
@@ -264,7 +264,7 @@ void FileHandler::startReadingThread() {
                 
             }else{
                 numberOfOutputs = loadedFile->output[rank].size();
-                cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
+                //cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
             }
             
             files_processed++;
@@ -296,7 +296,7 @@ void FileHandler::startReadingThread() {
         UNLOCK(loadedFile->mutex);
 
         if (rank != WRITE_RANK) {
-            cout << "ENTRA PARA ENVIAR rank= " << rank << endl;
+            //cout << "ENTRA PARA ENVIAR rank= " << rank << endl;
 
             MPI_Datatype OutputPairtype;
             MPI_Datatype type[2] = {MPI_INT, MPI_SHORT};
@@ -307,12 +307,16 @@ void FileHandler::startReadingThread() {
 
             // Send a first message containing the number of elements
             numberOfOutputs = loadedFile->output[rank].size();
-            cout << "vai enviar(rank=" << rank << ") :: " << numberOfOutputs << endl;
+            //cout << "vai enviar(rank=" << rank << ") :: " << numberOfOutputs << endl;
             MPI_Send(&numberOfOutputs, 1, MPI_INT, WRITE_RANK, files_processed, MPI_COMM_WORLD);
 
             if (numberOfOutputs > 0) {
                 // And a second with the elements themselves
-                cout << "vai enviar 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
+                //cout << "vai enviar 2 (rank=" << rank << ") :: " << numberOfOutputs << endl;
+                //printf("env: indice %d, regra %d\n", (loadedFile->output[rank])[0].index, (loadedFile->output[rank])[0].rule);
+                //printf("env: indice %d, regra %d\n", (loadedFile->output[rank])[1].index, (loadedFile->output[rank])[1].rule);
+                
+                
                 
                 MPI_Send(&(loadedFile->output[rank])[0], loadedFile->output[rank].size(),
                         OutputPairtype, WRITE_RANK, files_processed, MPI_COMM_WORLD);
@@ -329,13 +333,13 @@ void FileHandler::startReadingThread() {
 
         }else{
                 numberOfOutputs = loadedFile->output[rank].size();
-                cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
+                //cout << "tenho (rank="<<rank <<") :: "<< numberOfOutputs << endl; 
             }
 
         files_processed++;
     }
     
-    cout << " acabou :S .......... "<< rank << endl;
+    //cout << " acabou :S .......... "<< rank << endl;
 }
 
 file_pointer FileHandler::getNextWorkFile(int file_id) {
@@ -396,7 +400,7 @@ unsigned long int FileHandler::getMemoryUsed() {
 
 void FileHandler::manageOutputOf(int file_id, const char* fileName) {
 
-    clock_t s = clock();
+    //clock_t s = clock();
     
     file_pointer file = inputHandler[file_id];
 
@@ -410,7 +414,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     }
     printf("Found %d outputs\n", fileSize);
 
-    cout << "contador::" << fileSize << endl;
+    //cout << "contador::" << fileSize << endl;
     fileSize *= RULE_SIZE * 6 * sizeof (char);
 
     fd = open(fileName, O_RDWR | O_CREAT, (mode_t) 0600);
@@ -447,7 +451,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     int idx = 0;
     cell_array t_id;
 
-    cout << "Encontrados: " << fileSize << endl;
+    //cout << "Encontrados: " << fileSize << endl;
     cout << "Extra memory reserved: " << fileSize / (float) (1048576) << " MB\n";
     
     int j;
@@ -522,7 +526,7 @@ void FileHandler::manageOutputOf(int file_id, const char* fileName) {
     close(fd);
     munmap(map, sizeof (map));
 
-    cout << "\nWrite took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
+   // cout << "\nWrite took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 
 }
 
@@ -572,6 +576,7 @@ file_pointer FileHandler::readFile(const char* FileName, int row_size, int vecto
 
     if (fd == -1) {
         perror("Error opening file for reading");
+        printf("do rank==%d ",rank);
         exit(EXIT_FAILURE);
     }
 
@@ -622,7 +627,6 @@ file_pointer FileHandler::readFile(const char* FileName, int row_size, int vecto
         value = c_nextToken(',');
         k++;
     }
-    cout << "k:::: " << k << endl;
     close(fd);
     munmap(map, sizeof (map));
 
@@ -631,7 +635,7 @@ file_pointer FileHandler::readFile(const char* FileName, int row_size, int vecto
     file->workVector = rules;
     file->loaded = true;
 
-    cout << "\nRead took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
+    //cout << "\nRead took: " << (((double) clock() - s) / CLOCKS_PER_SEC) << endl;
 
     return file;
 }

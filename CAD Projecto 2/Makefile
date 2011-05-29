@@ -2,7 +2,7 @@
 SHELL = /bin/sh
 
 all: FileHandler.o
-	mpic++ -Wall -o test main.cpp FileHandler.o
+	mpic++ -fast -Mipa=fast,inline -O3 -Wall -o test main.cpp FileHandler.o
 
 # now define how each object file is a target and list dependencies and how
 #  to build that object file if any dependencies change
